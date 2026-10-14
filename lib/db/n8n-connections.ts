@@ -9,12 +9,15 @@
 import { getSupabase } from "../supabase";
 import { encrypt, decrypt } from "../crypto";
 import type { N8nConnectionCreds } from "../n8n/client";
+import { keyExpiresAt } from "../n8n/key-expiry";
 
 export type MaskedConnection = {
   id: string;
   name: string;
   base_url: string;
   api_key_masked: string;
+  /** Read from the key itself (n8n keys are JWTs); null when it does not say. */
+  api_key_expires_at: string | null;
   // Base workflow duplicated for a new client (Sprint 16). Null when this
   // connection has no template configured. One pair per CRM: the unsuffixed
   // columns are Kommo's, which is why they keep their original names.
@@ -47,21 +50,24 @@ function maskKey(plain: string): string {
   return `••••${plain.slice(-4)}`;
 }
 
-function maskFromEncrypted(encrypted: string): string {
+function maskFromEncrypted(encrypted: string): { masked: string; expiresAt: string | null } {
   try {
-    return maskKey(decrypt(encrypted));
+    const plain = decrypt(encrypted);
+    return { masked: maskKey(plain), expiresAt: keyExpiresAt(plain) };
   } catch {
     // Key present but undecryptable (e.g. KEY_ENCRYPTION_SECRET rotated).
-    return "•••• (no legible)";
+    return { masked: "•••• (no legible)", expiresAt: null };
   }
 }
 
 function toMasked(row: any): MaskedConnection {
+  const key = maskFromEncrypted(row.api_key_encrypted);
   return {
     id: row.id,
     name: row.name,
     base_url: row.base_url,
-    api_key_masked: maskFromEncrypted(row.api_key_encrypted),
+    api_key_masked: key.masked,
+    api_key_expires_at: key.expiresAt,
     template_workflow_id: row.template_workflow_id ?? null,
     template_workflow_name: row.template_workflow_name ?? null,
     template_workflow_id_ghl: row.template_workflow_id_ghl ?? null,
@@ -212,4 +218,23 @@ export async function getConnectionCreds(id: string): Promise<N8nConnectionCreds
     .single();
   if (error) throw new Error(`No se pudo obtener la conexión n8n: ${error.message}`);
   return { baseUrl: data.base_url, apiKey: decrypt(data.api_key_encrypted) };
+}
+
+/**
+ * Archiving a client deletes the key to its own n8n: holding a third party's
+ * key with nothing to push is pure risk, and after the 90 days the team gives
+ * every key it would be dead anyway. Its bindings to that instance go first
+ * (they point at it); the sync history keeps its events, unlinked. Zebra's
+ * connections are never touched. Unarchiving means connecting again.
+ */
+export async function deleteClientConnection(clientId: string): Promise<void> {
+  const sb = getSupabase();
+  const { data: own, error } = await sb.from("n8n_connections").select("id").eq("client_id", clientId);
+  if (error) throw new Error(`No se pudo revisar el n8n del cliente: ${error.message}`);
+  const ids = (own ?? []).map((c) => c.id);
+  if (ids.length === 0) return;
+  const { error: bErr } = await sb.from("n8n_bindings").delete().in("connection_id", ids);
+  if (bErr) throw new Error(`No se pudieron quitar los vínculos a su n8n: ${bErr.message}`);
+  const { error: cErr } = await sb.from("n8n_connections").delete().in("id", ids);
+  if (cErr) throw new Error(`No se pudo borrar la conexión a su n8n: ${cErr.message}`);
 }

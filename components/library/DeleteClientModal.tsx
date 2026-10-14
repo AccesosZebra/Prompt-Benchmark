@@ -29,7 +29,7 @@ export function DeleteClientModal({ client, onClose, onDone }: Props) {
       }
       warning={{
         title: `¿Eliminar "${client.name}"?`,
-        body: "Esta acción es permanente. Si solo quieres ocultarlo de la biblioteca, considera archivarlo: podrás restaurarlo más tarde.",
+        body: "Esta acción es permanente. Si solo quieres ocultarlo de la biblioteca, considera archivarlo: podrás restaurarlo más tarde. Archivarlo borra la API key de su n8n, si la tenía.",
         secondary: {
           label: "Archivar",
           onAction: () =>
