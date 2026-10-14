@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listBindings, createApiBinding, createManualBinding } from "@/lib/db/n8n-bindings";
 import { createApiBindingSchema, createManualBindingSchema } from "@/lib/schemas/n8n";
-import { handleError } from "@/lib/http";
+import { getConnection } from "@/lib/db/n8n-connections";
+import { handleError, jsonError } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,12 @@ export async function POST(req: NextRequest, { params }: Params) {
       return NextResponse.json(created, { status: 201 });
     }
     const input = createApiBindingSchema.parse(body);
+    // A client's own n8n only takes that client's prompt.
+    const conn = await getConnection(input.connection_id);
+    if (!conn) return jsonError("Conexión n8n no encontrada.", 404);
+    if (conn.client_id && conn.client_id !== id) {
+      return jsonError("Esa conexión es el n8n de otro cliente.", 403);
+    }
     const created = await createApiBinding(id, input);
     return NextResponse.json(created, { status: 201 });
   } catch (err) {

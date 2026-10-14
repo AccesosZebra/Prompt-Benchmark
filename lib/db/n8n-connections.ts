@@ -22,6 +22,9 @@ export type MaskedConnection = {
   template_workflow_name: string | null;
   template_workflow_id_ghl: string | null;
   template_workflow_name_ghl: string | null;
+  // Null for a Zebra connection (offered to every client). Set when it is one
+  // client's own n8n: offered only to that client, never holds a template.
+  client_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -32,6 +35,12 @@ export class ConnectionInUseError extends Error {
     super(message);
     this.name = "ConnectionInUseError";
   }
+}
+
+/** Two base URLs that reach the same n8n: case and trailing slashes aside. */
+export function sameInstance(a: string, b: string): boolean {
+  const norm = (u: string) => u.trim().toLowerCase().replace(/\/+$/, "");
+  return norm(a) === norm(b);
 }
 
 function maskKey(plain: string): string {
@@ -57,17 +66,24 @@ function toMasked(row: any): MaskedConnection {
     template_workflow_name: row.template_workflow_name ?? null,
     template_workflow_id_ghl: row.template_workflow_id_ghl ?? null,
     template_workflow_name_ghl: row.template_workflow_name_ghl ?? null,
+    client_id: row.client_id ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
 }
 
-export async function listConnections(): Promise<MaskedConnection[]> {
+/**
+ * Zebra's connections, plus `clientId`'s own one when given. A client's
+ * connection is never listed for anyone else, so another client's prompt can
+ * not be bound to it. `clientId` must be a validated UUID: it goes into a filter.
+ */
+export async function listConnections(clientId?: string): Promise<MaskedConnection[]> {
   const sb = getSupabase();
-  const { data, error } = await sb
-    .from("n8n_connections")
-    .select("*")
-    .order("created_at", { ascending: true });
+  let query = sb.from("n8n_connections").select("*");
+  query = clientId
+    ? query.or(`client_id.is.null,client_id.eq.${clientId}`)
+    : query.is("client_id", null);
+  const { data, error } = await query.order("created_at", { ascending: true });
   if (error) throw new Error(`No se pudieron listar las conexiones n8n: ${error.message}`);
   return (data ?? []).map(toMasked);
 }
@@ -87,14 +103,24 @@ export async function createConnection(input: {
   name: string;
   base_url: string;
   api_key: string;
+  client_id?: string | null;
 }): Promise<MaskedConnection> {
   const sb = getSupabase();
+  // Same instance twice would split its workflows across two connections, and
+  // the adopt-by-name in provisioning only looks inside one.
+  const { data: all, error: allErr } = await sb.from("n8n_connections").select("name, base_url");
+  if (allErr) throw new Error(`No se pudieron revisar las conexiones n8n: ${allErr.message}`);
+  const same = (all ?? []).find((c) => sameInstance(c.base_url, input.base_url));
+  if (same) {
+    throw new ConnectionInUseError(`Esa instancia de n8n ya está dada de alta como «${same.name}».`);
+  }
   const { data, error } = await sb
     .from("n8n_connections")
     .insert({
       name: input.name,
       base_url: input.base_url,
       api_key_encrypted: encrypt(input.api_key),
+      client_id: input.client_id ?? null,
     })
     .select("*")
     .single();
@@ -117,7 +143,18 @@ export async function updateConnection(
   const sb = getSupabase();
   const patch: Record<string, unknown> = {};
   if (input.name !== undefined) patch.name = input.name;
-  if (input.base_url !== undefined) patch.base_url = input.base_url;
+  if (input.base_url !== undefined) {
+    const { data: all, error: allErr } = await sb
+      .from("n8n_connections")
+      .select("name, base_url")
+      .neq("id", id);
+    if (allErr) throw new Error(`No se pudieron revisar las conexiones n8n: ${allErr.message}`);
+    const same = (all ?? []).find((c) => sameInstance(c.base_url, input.base_url!));
+    if (same) {
+      throw new ConnectionInUseError(`Esa instancia de n8n ya está dada de alta como «${same.name}».`);
+    }
+    patch.base_url = input.base_url;
+  }
   // Re-encrypt only when a new key is provided; blank leaves the existing one.
   if (input.api_key) patch.api_key_encrypted = encrypt(input.api_key);
   if (input.template_workflow_id !== undefined) {

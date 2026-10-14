@@ -7,6 +7,8 @@ export const createConnectionSchema = z.object({
     .min(1, "El nombre es obligatorio."),
   base_url: z.string().url("La URL base debe ser una URL válida."),
   api_key: z.string({ required_error: "La API key es obligatoria." }).trim().min(1, "La API key es obligatoria."),
+  // Set when it is the client's own n8n, created from that client's page.
+  client_id: z.string().uuid().nullable().optional(),
 });
 
 export const updateConnectionSchema = z

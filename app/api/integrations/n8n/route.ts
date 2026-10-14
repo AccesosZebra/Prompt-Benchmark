@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listConnections, createConnection } from "@/lib/db/n8n-connections";
 import { createConnectionSchema } from "@/lib/schemas/n8n";
-import { handleError } from "@/lib/http";
+import { z } from "zod";
+import { handleError, jsonError } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+/** Zebra's connections; with `?client_id=`, that client's own one too. */
+export async function GET(req: NextRequest) {
   try {
-    return NextResponse.json(await listConnections());
+    const clientId = req.nextUrl.searchParams.get("client_id");
+    if (clientId && !z.string().uuid().safeParse(clientId).success) {
+      return jsonError("client_id no válido.", 400);
+    }
+    return NextResponse.json(await listConnections(clientId ?? undefined));
   } catch (err) {
     return handleError(err);
   }

@@ -292,12 +292,15 @@ export async function resolveTemplate(override?: {
   crm?: Crm;
 }): Promise<{ connectionId: string; workflowId: string } | null> {
   if (override?.connectionId && override.workflowId) {
+    // Templates are only copied from Zebra's n8n, never from a client's own.
+    const conn = await getConnection(override.connectionId);
+    if (!conn || conn.client_id) return null;
     return { connectionId: override.connectionId, workflowId: override.workflowId };
   }
   const crm = override?.crm ?? DEFAULT_CRM;
   if (override?.connectionId) {
     const conn = await getConnection(override.connectionId);
-    const workflowId = conn && templateIdFor(conn, crm);
+    const workflowId = conn && !conn.client_id && templateIdFor(conn, crm);
     return workflowId ? { connectionId: conn.id, workflowId } : null;
   }
   const withTemplate = (await listConnectionsWithTemplate()).find((t) => t.crm === crm);
