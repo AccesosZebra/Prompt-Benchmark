@@ -29,16 +29,25 @@ export function DeleteClientModal({ client, onClose, onDone }: Props) {
       }
       warning={{
         title: `¿Eliminar "${client.name}"?`,
-        body: "Esta acción es permanente. Si solo quieres ocultarlo de la biblioteca, considera archivarlo: podrás restaurarlo más tarde. Archivarlo borra la API key de su n8n, si la tenía.",
-        secondary: {
-          label: "Archivar",
-          onAction: () =>
-            call(
-              `/api/clients/${client.id}/archive`,
-              "POST",
-              "No se pudo archivar.",
-            ),
-        },
+        // An archived client is already hidden, so offering to archive it is
+        // a no-op: the way back is restoring it.
+        ...(client.archived_at
+          ? {
+              body: "Esta acción es permanente. Ya está archivado: si quieres recuperarlo, desarchívalo y vuelve a la biblioteca.",
+              secondary: {
+                label: "Desarchivar",
+                onAction: () =>
+                  call(`/api/clients/${client.id}/restore`, "POST", "No se pudo desarchivar."),
+              },
+            }
+          : {
+              body: "Esta acción es permanente. Si solo quieres ocultarlo de la biblioteca, considera archivarlo: podrás restaurarlo más tarde. Archivarlo borra la API key de su n8n, si la tenía.",
+              secondary: {
+                label: "Archivar",
+                onAction: () =>
+                  call(`/api/clients/${client.id}/archive`, "POST", "No se pudo archivar."),
+              },
+            }),
       }}
       consequences={[
         client.version_count === 1
