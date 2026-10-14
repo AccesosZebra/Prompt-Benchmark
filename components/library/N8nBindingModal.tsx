@@ -21,6 +21,8 @@ export type BindingSelection = {
 };
 
 type Props = {
+  /** Whose binding this is: its own n8n connection, if any, is offered too. */
+  clientId: string;
   open: boolean;
   onClose: () => void;
   /** Called with the chosen API target. The parent persists it. */
@@ -46,6 +48,7 @@ type Mode = "api" | "manual";
  * Self-contained (fetches connections, workflows and agents on demand).
  */
 export function N8nBindingModal({
+  clientId,
   open,
   onClose,
   onConfirm,
@@ -112,11 +115,12 @@ export function N8nBindingModal({
   const preWorkflow = preselect?.workflowId;
   useEffect(() => {
     if (!open) return;
-    fetch("/api/integrations/n8n")
+    fetch(`/api/integrations/n8n?client_id=${clientId}`)
       .then((r) => r.json())
       .then(async (rows: MaskedConnection[]) => {
         setConnections(rows);
-        const initial = preConnection ?? rows[0]?.id;
+        // A client with its own n8n is bound there, not on Zebra's.
+        const initial = preConnection ?? (rows.find((c) => c.client_id) ?? rows[0])?.id;
         if (!initial) return;
         setConnectionId(initial);
         await loadWorkflows(initial);
@@ -126,7 +130,7 @@ export function N8nBindingModal({
         }
       })
       .catch(() => setError("No se pudieron cargar las conexiones n8n."));
-  }, [open, loadWorkflows, loadAgents, preConnection, preWorkflow]);
+  }, [open, clientId, loadWorkflows, loadAgents, preConnection, preWorkflow]);
 
   function onPickConnection(connId: string) {
     setConnectionId(connId);

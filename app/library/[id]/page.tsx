@@ -29,6 +29,7 @@ import { N8nSyncModal } from "@/components/library/N8nSyncModal";
 import { ConversationHistory } from "@/components/library/ConversationHistory";
 import { ClientToolsCard } from "@/components/library/ClientToolsCard";
 import { OwnN8nHandoff } from "@/components/library/OwnN8nHandoff";
+import { ClientN8nConnection } from "@/components/library/ClientN8nConnection";
 import type { Crm } from "@/lib/crm";
 import { resError } from "@/lib/res-error";
 
@@ -815,42 +816,47 @@ export default function ClientDetailPage() {
           </div>
 
           {/* On our n8n we do the work: duplicate, sync, create the table.
-              On the client's, none of that is reachable, so the same two
-              things are handed over as a JSON and a SQL they run themselves,
-              and there is no sync to show. Herramientas is ours either way,
-              which is why it sits last on both branches. */}
-          {detail.n8n_host === "own" ? (
-            <OwnN8nHandoff
-              clientId={id}
-              clientName={detail.name}
-              crm={detail.crm}
-              onCrmChange={changeCrm}
-            />
-          ) : (
+              On the client's we cannot duplicate or create anything, so the
+              flow and the table are handed over as a JSON and a SQL they run
+              themselves. Deploying the prompt works on both: through their API
+              key when they gave one, by hand otherwise, so the deployment card
+              shows either way. Herramientas is ours either way, which is why it
+              sits last on both branches. */}
+          {detail.n8n_host === "own" && (
             <>
-              <N8nDeploymentCard
+              <ClientN8nConnection clientId={id} />
+              <OwnN8nHandoff
                 clientId={id}
-                productionVersion={
-                  detail.production_version
-                    ? {
-                        id: detail.production_version.id,
-                        version_number: detail.production_version.version_number,
-                        content: detail.production_version.content,
-                      }
-                    : null
-                }
-                onRequestSync={() => {
-                  if (!detail.production_version) return;
-                  setSyncTarget({
-                    versionId: detail.production_version.id,
-                    versionNumber: detail.production_version.version_number,
-                    versionContent: detail.production_version.content,
-                  });
-                }}
+                clientName={detail.name}
+                crm={detail.crm}
+                onCrmChange={changeCrm}
               />
-              <N8nSyncHistory clientId={id} />
-              <ConversationHistory clientId={id} clientName={detail.name} />
             </>
+          )}
+          <N8nDeploymentCard
+            clientId={id}
+            canDuplicate={detail.n8n_host === "zebra"}
+            productionVersion={
+              detail.production_version
+                ? {
+                    id: detail.production_version.id,
+                    version_number: detail.production_version.version_number,
+                    content: detail.production_version.content,
+                  }
+                : null
+            }
+            onRequestSync={() => {
+              if (!detail.production_version) return;
+              setSyncTarget({
+                versionId: detail.production_version.id,
+                versionNumber: detail.production_version.version_number,
+                versionContent: detail.production_version.content,
+              });
+            }}
+          />
+          <N8nSyncHistory clientId={id} />
+          {detail.n8n_host === "zebra" && (
+            <ConversationHistory clientId={id} clientName={detail.name} />
           )}
           <ClientToolsCard clientId={id} />
         </aside>

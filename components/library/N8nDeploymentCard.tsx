@@ -24,6 +24,8 @@ type Props = {
   /** Opens the promote-style sync modal against the current production
    *  version, so a drifted binding can be re-pushed with the usual diff. */
   onRequestSync: () => void;
+  /** False for a client on its own n8n: the template copy would land in Zebra's. */
+  canDuplicate?: boolean;
 };
 
 const DRIFT_LABEL: Record<DriftStatus, string> = {
@@ -42,7 +44,12 @@ const DRIFT_LABEL: Record<DriftStatus, string> = {
  * page lean. Manual targets show a pending-deploy reminder that compares
  * `last_deployed_version_id` against the client's current production version.
  */
-export function N8nDeploymentCard({ clientId, productionVersion, onRequestSync }: Props) {
+export function N8nDeploymentCard({
+  clientId,
+  productionVersion,
+  onRequestSync,
+  canDuplicate = true,
+}: Props) {
   const [bindings, setBindings] = useState<N8nBinding[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -257,7 +264,7 @@ export function N8nDeploymentCard({ clientId, productionVersion, onRequestSync }
           <span className="muted" style={{ fontSize: 13 }}>
             Sin vínculos. Al promover, este cliente no actualiza ningún nodo.
           </span>
-          {hasTemplate && (
+          {hasTemplate && canDuplicate && (
             <Button
               size="sm"
               variant="secondary"
@@ -359,6 +366,7 @@ export function N8nDeploymentCard({ clientId, productionVersion, onRequestSync }
 
       {modalOpen && (
         <N8nBindingModal
+          clientId={clientId}
           open={modalOpen}
           onClose={() => {
             setModalOpen(false);

@@ -14,10 +14,14 @@ type Props = {
   onClose: () => void;
   onSaved: () => void;
   connection?: MaskedConnection | null;
+  /** Creating a client's own n8n from its page: no templates, owned by it. */
+  clientId?: string;
 };
 
-export function N8nConnectionFormModal({ open, onClose, onSaved, connection }: Props) {
+export function N8nConnectionFormModal({ open, onClose, onSaved, connection, clientId }: Props) {
   const editing = Boolean(connection);
+  // Templates only live on Zebra's connections, so a client's never shows them.
+  const ownedBy = connection?.client_id ?? clientId ?? null;
   const [name, setName] = useState(connection?.name ?? "");
   const [baseUrl, setBaseUrl] = useState(connection?.base_url ?? "");
   const [apiKey, setApiKey] = useState("");
@@ -33,7 +37,7 @@ export function N8nConnectionFormModal({ open, onClose, onSaved, connection }: P
   // The workflow list needs a saved connection to authenticate with, so the
   // template picker only exists while editing. Loaded once the modal opens.
   useEffect(() => {
-    if (!open || !connection) return;
+    if (!open || !connection || ownedBy) return;
     let cancelled = false;
     setLoadingWorkflows(true);
     fetch(`/api/integrations/n8n/${connection.id}/workflows`)
@@ -51,7 +55,7 @@ export function N8nConnectionFormModal({ open, onClose, onSaved, connection }: P
     return () => {
       cancelled = true;
     };
-  }, [open, connection]);
+  }, [open, connection, ownedBy]);
 
   async function handleTest() {
     setTesting(true);
@@ -88,7 +92,8 @@ export function N8nConnectionFormModal({ open, onClose, onSaved, connection }: P
       base_url: baseUrl.trim(),
     };
     if (apiKey.trim()) payload.api_key = apiKey.trim();
-    if (editing) {
+    if (!editing && ownedBy) payload.client_id = ownedBy;
+    if (editing && !ownedBy) {
       // Keep the stored label when the list failed to load but a template was
       // already picked, so saving the name/url does not wipe it.
       const chosen = workflows.find((w) => w.id === templateId);
@@ -133,7 +138,15 @@ export function N8nConnectionFormModal({ open, onClose, onSaved, connection }: P
     <Modal
       open={open}
       onClose={onClose}
-      title={editing ? "Editar conexión n8n" : "Agregar conexión n8n"}
+      title={
+        ownedBy
+          ? editing
+            ? "Editar el n8n del cliente"
+            : "Conectar el n8n del cliente"
+          : editing
+            ? "Editar conexión n8n"
+            : "Agregar conexión n8n"
+      }
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={saving}>
@@ -186,36 +199,38 @@ export function N8nConnectionFormModal({ open, onClose, onSaved, connection }: P
         />
       </div>
 
-      <div className="field">
-        <label className="field-label">Flujo plantilla de Kommo</label>
-        {editing ? (
-          <>
-            <SearchableChip
-              icon={<IconTemplate size={14} />}
-              placeholder="Sin plantilla"
-              searchPlaceholder="Buscar flujo…"
-              items={workflows.map((w) => ({ id: w.id, label: w.name }))}
-              value={templateId}
-              onChange={setTemplateId}
-              loading={loadingWorkflows}
-              emptyText="Esta instancia no tiene flujos."
-            />
-            <p className="field-hint">
-              Se duplica y se renombra &laquo;IA Mensajes {"{Cliente}"}&raquo; al crear un cliente.
-              Es la opción por omisión.
-            </p>
-            {templateId && (
-              <Button size="sm" variant="ghost" onClick={() => setTemplateId("")}>
-                Quitar plantilla
-              </Button>
-            )}
-          </>
-        ) : (
-          <p className="field-hint">Guarda la conexión para poder elegir sus flujos plantilla.</p>
-        )}
-      </div>
+      {!ownedBy && (
+        <div className="field">
+          <label className="field-label">Flujo plantilla de Kommo</label>
+          {editing ? (
+            <>
+              <SearchableChip
+                icon={<IconTemplate size={14} />}
+                placeholder="Sin plantilla"
+                searchPlaceholder="Buscar flujo…"
+                items={workflows.map((w) => ({ id: w.id, label: w.name }))}
+                value={templateId}
+                onChange={setTemplateId}
+                loading={loadingWorkflows}
+                emptyText="Esta instancia no tiene flujos."
+              />
+              <p className="field-hint">
+                Se duplica y se renombra &laquo;IA Mensajes {"{Cliente}"}&raquo; al crear un cliente.
+                Es la opción por omisión.
+              </p>
+              {templateId && (
+                <Button size="sm" variant="ghost" onClick={() => setTemplateId("")}>
+                  Quitar plantilla
+                </Button>
+              )}
+            </>
+          ) : (
+            <p className="field-hint">Guarda la conexión para poder elegir sus flujos plantilla.</p>
+          )}
+        </div>
+      )}
 
-      {editing && (
+      {editing && !ownedBy && (
         <div className="field">
           <label className="field-label">Flujo plantilla de Go High Level</label>
           <SearchableChip
