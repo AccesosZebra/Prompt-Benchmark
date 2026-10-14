@@ -2,6 +2,7 @@
 
 import type { MaskedConnection } from "@/lib/db/n8n-connections";
 import { Button } from "@/components/ui/Button";
+import { expiryLabel } from "@/lib/n8n/key-expiry";
 
 type Props = {
   connection: MaskedConnection;
@@ -10,6 +11,7 @@ type Props = {
 };
 
 export function N8nConnectionRow({ connection, onEdit, onDelete }: Props) {
+  const expiry = connection.api_key_expires_at ? expiryLabel(connection.api_key_expires_at) : null;
   return (
     <div className="card">
       <div className="provider-head" style={{ cursor: "default" }}>
@@ -26,6 +28,9 @@ export function N8nConnectionRow({ connection, onEdit, onDelete }: Props) {
               ? `Plantilla Go High Level: ${connection.template_workflow_name_ghl}`
               : "Sin flujo plantilla de Go High Level"}
           </div>
+          {expiry && (
+            <div className={expiry.warn ? "form-error" : "adapter-label"}>{expiry.text}</div>
+          )}
         </div>
         <div className="provider-actions">
           <span className="masked-key">{connection.api_key_masked}</span>

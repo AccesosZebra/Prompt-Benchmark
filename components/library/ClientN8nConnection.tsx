@@ -6,12 +6,13 @@ import type { MaskedConnection } from "@/lib/db/n8n-connections";
 import { Button } from "@/components/ui/Button";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { N8nConnectionFormModal } from "@/components/settings/N8nConnectionFormModal";
+import { expiryLabel } from "@/lib/n8n/key-expiry";
 
 /**
  * The API key of a client that runs its own n8n. With it, that client gets the
  * same push and drift as one on Zebra's n8n; without it, the handoff below and
  * a manual binding are all there is. The connection belongs to this client:
- * it is never offered to any other one, and it goes away with the client.
+ * it is never offered to any other one, and archiving the client deletes it.
  */
 export function ClientN8nConnection({ clientId }: { clientId: string }) {
   const [connection, setConnection] = useState<MaskedConnection | null>(null);
@@ -31,6 +32,7 @@ export function ClientN8nConnection({ clientId }: { clientId: string }) {
   useEffect(load, [load]);
 
   if (!loaded) return null;
+  const expiry = connection?.api_key_expires_at ? expiryLabel(connection.api_key_expires_at) : null;
 
   return (
     <div className="n8n-card">
@@ -49,9 +51,16 @@ export function ClientN8nConnection({ clientId }: { clientId: string }) {
         </Button>
       </div>
       {connection ? (
-        <p className="field-hint" style={{ marginBottom: 0 }}>
-          {connection.base_url} · {connection.api_key_masked}
-        </p>
+        <>
+          <p className="field-hint" style={{ marginBottom: 0 }}>
+            {connection.base_url} · {connection.api_key_masked}
+          </p>
+          {expiry && (
+            <p className={expiry.warn ? "form-error" : "field-hint"} style={{ marginBottom: 0 }}>
+              {expiry.text}
+            </p>
+          )}
+        </>
       ) : (
         <p className="field-hint" style={{ marginBottom: 0 }}>
           Sin conectar: el prompt se pega a mano en su n8n.

@@ -72,7 +72,7 @@ async function request(
 async function ensureOk(res: Response, action: string): Promise<Response> {
   if (res.ok) return res;
   if (res.status === 401 || res.status === 403) {
-    throw new N8nApiError("n8n rechazó la API key. Verifícala en Ajustes.", res.status);
+    throw new N8nApiError("n8n rechazó la API key: puede haber caducado. Genera otra y actualiza la conexión.", res.status);
   }
   if (res.status === 404) {
     throw new N8nApiError("El recurso no existe en n8n (404).", 404);
