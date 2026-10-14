@@ -74,7 +74,7 @@ export default function SettingsPage() {
         fetch("/api/providers"),
         fetch("/api/role-defaults"),
         fetch("/api/prompt-overrides"),
-        fetch("/api/integrations/n8n"),
+        fetch("/api/integrations/n8n?scope=all"),
         fetch("/api/composer-settings"),
         fetch("/api/integrations/google-chat"),
       ]);

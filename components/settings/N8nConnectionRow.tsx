@@ -18,16 +18,23 @@ export function N8nConnectionRow({ connection, onEdit, onDelete }: Props) {
         <div>
           <div className="provider-name">{connection.name}</div>
           <div className="adapter-label">{connection.base_url}</div>
-          <div className="adapter-label">
-            {connection.template_workflow_name
-              ? `Plantilla Kommo: ${connection.template_workflow_name}`
-              : "Sin flujo plantilla de Kommo"}
-          </div>
-          <div className="adapter-label">
-            {connection.template_workflow_name_ghl
-              ? `Plantilla Go High Level: ${connection.template_workflow_name_ghl}`
-              : "Sin flujo plantilla de Go High Level"}
-          </div>
+          {connection.client_id ? (
+            // A client's own n8n never holds templates: say whose it is instead.
+            <div className="adapter-label">n8n propio de {connection.client_name ?? "un cliente"}</div>
+          ) : (
+            <>
+              <div className="adapter-label">
+                {connection.template_workflow_name
+                  ? `Plantilla Kommo: ${connection.template_workflow_name}`
+                  : "Sin flujo plantilla de Kommo"}
+              </div>
+              <div className="adapter-label">
+                {connection.template_workflow_name_ghl
+                  ? `Plantilla Go High Level: ${connection.template_workflow_name_ghl}`
+                  : "Sin flujo plantilla de Go High Level"}
+              </div>
+            </>
+          )}
           {expiry && (
             <div className={expiry.warn ? "form-error" : "adapter-label"}>{expiry.text}</div>
           )}

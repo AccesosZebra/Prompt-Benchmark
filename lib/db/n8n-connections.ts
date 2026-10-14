@@ -28,6 +28,8 @@ export type MaskedConnection = {
   // Null for a Zebra connection (offered to every client). Set when it is one
   // client's own n8n: offered only to that client, never holds a template.
   client_id: string | null;
+  /** The owning client's name, for listing it outside that client's page. */
+  client_name: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -60,6 +62,8 @@ function maskFromEncrypted(encrypted: string): { masked: string; expiresAt: stri
   }
 }
 
+const SELECT = "*, clients(name)";
+
 function toMasked(row: any): MaskedConnection {
   const key = maskFromEncrypted(row.api_key_encrypted);
   return {
@@ -73,6 +77,7 @@ function toMasked(row: any): MaskedConnection {
     template_workflow_id_ghl: row.template_workflow_id_ghl ?? null,
     template_workflow_name_ghl: row.template_workflow_name_ghl ?? null,
     client_id: row.client_id ?? null,
+    client_name: row.clients?.name ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -80,15 +85,21 @@ function toMasked(row: any): MaskedConnection {
 
 /**
  * Zebra's connections, plus `clientId`'s own one when given. A client's
- * connection is never listed for anyone else, so another client's prompt can
- * not be bound to it. `clientId` must be a validated UUID: it goes into a filter.
+ * connection is never offered to anyone else, so another client's prompt can
+ * not be bound to it. `all` is for Ajustes, the inventory of every key we hold,
+ * where nothing is bound. `clientId` must be a validated UUID: it goes into a
+ * filter.
  */
-export async function listConnections(clientId?: string): Promise<MaskedConnection[]> {
+export async function listConnections(
+  opts: { clientId?: string; all?: boolean } = {},
+): Promise<MaskedConnection[]> {
   const sb = getSupabase();
-  let query = sb.from("n8n_connections").select("*");
-  query = clientId
-    ? query.or(`client_id.is.null,client_id.eq.${clientId}`)
-    : query.is("client_id", null);
+  let query = sb.from("n8n_connections").select(SELECT);
+  if (!opts.all) {
+    query = opts.clientId
+      ? query.or(`client_id.is.null,client_id.eq.${opts.clientId}`)
+      : query.is("client_id", null);
+  }
   const { data, error } = await query.order("created_at", { ascending: true });
   if (error) throw new Error(`No se pudieron listar las conexiones n8n: ${error.message}`);
   return (data ?? []).map(toMasked);
@@ -98,7 +109,7 @@ export async function getConnection(id: string): Promise<MaskedConnection | null
   const sb = getSupabase();
   const { data, error } = await sb
     .from("n8n_connections")
-    .select("*")
+    .select(SELECT)
     .eq("id", id)
     .maybeSingle();
   if (error) throw new Error(`No se pudo obtener la conexión n8n: ${error.message}`);
@@ -128,7 +139,7 @@ export async function createConnection(input: {
       api_key_encrypted: encrypt(input.api_key),
       client_id: input.client_id ?? null,
     })
-    .select("*")
+    .select(SELECT)
     .single();
   if (error) throw new Error(`No se pudo crear la conexión n8n: ${error.message}`);
   return toMasked(data);
@@ -180,7 +191,7 @@ export async function updateConnection(
     .from("n8n_connections")
     .update(patch)
     .eq("id", id)
-    .select("*")
+    .select(SELECT)
     .single();
   if (error) throw new Error(`No se pudo actualizar la conexión n8n: ${error.message}`);
   return toMasked(data);
