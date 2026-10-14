@@ -11,6 +11,9 @@
  *   they would also hand over how we name our credentials.
  * - `webhookId`: two flows must not share one, theirs has to be new.
  * - `pinData`: pinned runs carry real lead conversations.
+ * - header values of HTTP nodes: the template is a real client's flow, so its
+ *   tools carry THAT client's CRM key in a header. Names stay, so the one
+ *   importing it sees which headers to fill; Content-Type stays whole.
  * - everything above the workflow itself (id, versionId, active, tags, owner,
  *   timestamps): instance state, not the flow.
  *
@@ -26,7 +29,20 @@ export function buildWorkflowExport(
   const { workflow, retargeted } = retargetChatsTable(source, opts.schema);
   const nodes = workflow.nodes.map((node) => {
     const { credentials: _c, webhookId: _w, ...rest } = node;
-    return rest;
+    const headers = rest.parameters?.headerParameters?.parameters;
+    if (!Array.isArray(headers)) return rest;
+    return {
+      ...rest,
+      parameters: {
+        ...rest.parameters,
+        headerParameters: {
+          ...rest.parameters!.headerParameters,
+          parameters: headers.map((h: { name?: string; value?: unknown }) =>
+            String(h?.name ?? "").toLowerCase() === "content-type" ? h : { ...h, value: "" },
+          ),
+        },
+      },
+    };
   });
   const exported = {
     name: opts.name,

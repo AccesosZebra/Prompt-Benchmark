@@ -59,6 +59,34 @@ test("renames, retargets and strips what only means something in our n8n", () =>
   assert.equal(out.nodes[0].type, POSTGRES_NODE_TYPE);
 });
 
+test("blanks the template client's header values, keeps names and Content-Type", () => {
+  const source = template();
+  source.nodes.push({
+    id: "t1",
+    name: "consultar_disponibilidad",
+    type: "@n8n/n8n-nodes-langchain.toolHttpRequest",
+    parameters: {
+      url: "https://crm.example.com/api",
+      headerParameters: {
+        parameters: [
+          { name: "Authorization", value: "Bearer secreto-lezgo" },
+          { name: "Content-Type", value: "application/json" },
+        ],
+      },
+    },
+  });
+  const { json } = buildWorkflowExport(source, { name: "IA Mensajes Acalai", schema: "Acalai" });
+
+  assert.ok(!json.includes("secreto-lezgo"));
+  const headers = JSON.parse(json).nodes[1].parameters.headerParameters.parameters;
+  assert.deepEqual(headers, [
+    { name: "Authorization", value: "" },
+    { name: "Content-Type", value: "application/json" },
+  ]);
+  // The source keeps its key: only the copy is cleaned.
+  assert.equal((source.nodes[1].parameters as any).headerParameters.parameters[0].value, "Bearer secreto-lezgo");
+});
+
 test("does not mutate the source workflow", () => {
   const source = template();
   buildWorkflowExport(source, { name: "IA Mensajes Acalai", schema: "Acalai" });
