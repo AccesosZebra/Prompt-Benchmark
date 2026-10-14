@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { listBindings } from "@/lib/db/n8n-bindings";
 import { getVersion } from "@/lib/db/versions";
-import { pushBinding } from "@/lib/n8n/sync";
+import { pushBinding, type PushOutcome } from "@/lib/n8n/sync";
+import { pushPerWorkflowInOrder } from "@/lib/n8n/push-order";
 import { handleError, jsonError } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -38,18 +39,27 @@ export async function POST(req: NextRequest, { params }: Params) {
     const byId = new Map(bindings.map((b) => [b.id, b]));
     const nowIso = new Date().toISOString();
 
-    const outcomes = await Promise.all(
-      targets.map(async (t) => {
+    // Two bindings on one workflow must not be pushed in parallel: each PUT
+    // replaces the whole workflow and the last one would erase the other.
+    const outcomes = await pushPerWorkflowInOrder(
+      targets,
+      // An unknown binding gets its own key: it fails without touching n8n.
+      (t) => {
+        const b = byId.get(t.binding_id);
+        return b ? `${b.connection_id}/${b.workflow_id}` : `missing/${t.binding_id}`;
+      },
+      (t) => t.expected_workflow_version_id ?? null,
+      async (t, expectedWorkflowVersionId): Promise<PushOutcome> => {
         const binding = byId.get(t.binding_id);
         if (!binding) {
-          return { binding_id: t.binding_id, status: "error" as const, message: "Vínculo no encontrado." };
+          return { binding_id: t.binding_id, status: "error", message: "Vínculo no encontrado." };
         }
         return pushBinding(
           binding,
           { id: version.id, content: version.content },
-          { expectedWorkflowVersionId: t.expected_workflow_version_id ?? null, nowIso },
+          { expectedWorkflowVersionId, nowIso },
         );
-      }),
+      },
     );
 
     return NextResponse.json(outcomes);

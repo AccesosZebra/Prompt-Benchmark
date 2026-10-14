@@ -167,6 +167,8 @@ export type PushOutcome = {
   binding_id: string;
   status: "success" | "error";
   message?: string;
+  /** The workflow's versionId after a successful push, for the next push in its chain. */
+  workflow_version_id?: string | null;
 };
 
 /**
@@ -225,7 +227,7 @@ export async function pushBinding(
 
     // Replace only the target node; everything else is written back verbatim.
     workflow.nodes = workflow.nodes.map((n) => (n === located.node ? nextNode : n));
-    await updateWorkflow(creds, binding.workflow_id, workflow);
+    const saved = await updateWorkflow(creds, binding.workflow_id, workflow);
 
     // If we matched by name (ids changed), refresh the stored id.
     if (located.matched_by === "name") {
@@ -248,7 +250,11 @@ export async function pushBinding(
       pushed_content: nextRaw,
     });
 
-    return { binding_id: binding.id, status: "success" };
+    return {
+      binding_id: binding.id,
+      status: "success",
+      workflow_version_id: (saved as any).versionId ?? null,
+    };
   } catch (err) {
     return fail(err instanceof Error ? err.message : "No se pudo escribir en n8n.");
   }
