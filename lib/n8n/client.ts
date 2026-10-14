@@ -203,7 +203,13 @@ export async function updateWorkflow(
   return (await res.json()) as N8nWorkflow;
 }
 
-/** Lightweight reachability check for the "Probar conexión" button. */
+/**
+ * Check for the "Probar conexión" button: lists one workflow and reads it back
+ * whole, which is what a push needs. A key scoped to listing only fails here
+ * instead of on the first push. Write access is only proven by that push.
+ */
 export async function testConnection(creds: N8nConnectionCreds): Promise<void> {
-  await ensureOk(await request(creds, "/workflows?limit=1"), "Probar conexión");
+  const res = await ensureOk(await request(creds, "/workflows?limit=1"), "Probar conexión");
+  const first = (await res.json())?.data?.[0]?.id;
+  if (first) await getWorkflow(creds, String(first));
 }

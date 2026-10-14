@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { createWorkflow, sanitizeForUpdate, sanitizeSettings } from "./client.ts";
+import { createWorkflow, sanitizeForUpdate, sanitizeSettings, testConnection } from "./client.ts";
 import type { N8nWorkflow } from "./agent-node.ts";
 
 /** Runs `fn` with fetch stubbed, returning the single captured request. */
@@ -115,4 +115,25 @@ test("createWorkflow posts a sanitized copy to /workflows", async () => {
   assert.equal(body.name, "IA Mensajes Acalai");
   assert.deepEqual(body.settings, { executionOrder: "v1" });
   assert.equal(body.nodes.length, 1);
+});
+
+test("testConnection reads a workflow back, so a list-only key fails at the test, not the push", async () => {
+  const original = globalThis.fetch;
+  const urls: string[] = [];
+  globalThis.fetch = (async (url: string) => {
+    urls.push(String(url));
+    if (String(url).includes("limit=1")) {
+      return new Response(JSON.stringify({ data: [{ id: "wf1" }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ message: "Forbidden" }), { status: 403 });
+  }) as unknown as typeof fetch;
+  try {
+    await assert.rejects(testConnection({ baseUrl: "https://n8n.test", apiKey: "k" }), /API key/);
+  } finally {
+    globalThis.fetch = original;
+  }
+  assert.deepEqual(urls, [
+    "https://n8n.test/api/v1/workflows?limit=1",
+    "https://n8n.test/api/v1/workflows/wf1",
+  ]);
 });
