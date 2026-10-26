@@ -721,6 +721,8 @@ export default function ClientDetailPage() {
                         day: "2-digit",
                         month: "short",
                       })}
+                      {v.content &&
+                        ` · ${v.content.split("\n").length} ${v.content.split("\n").length === 1 ? "línea" : "líneas"}`}
                     </span>
                     {!v.is_production && detail.versions.length > 1 && (
                       <button
