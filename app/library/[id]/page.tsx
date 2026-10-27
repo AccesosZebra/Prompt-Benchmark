@@ -11,6 +11,7 @@ import {
   IconTrash,
   IconPencil,
   IconPlugConnected,
+  IconGitBranch,
 } from "@tabler/icons-react";
 import type { ClientDetail } from "@/lib/db/clients";
 import type { VersionListItem } from "@/lib/db/versions";
@@ -21,6 +22,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { FindReplace } from "@/components/ui/FindReplace";
+import { SearchableChip } from "@/components/ui/SearchableChip";
 import { SegmentPicker } from "@/components/library/SegmentPicker";
 import { AccountInput } from "@/components/library/AccountInput";
 import { N8nDeploymentCard } from "@/components/library/N8nDeploymentCard";
@@ -68,8 +70,8 @@ export default function ClientDetailPage() {
   // Version the user wants to edit by hand while a draft already exists.
   const [replaceDraftTarget, setReplaceDraftTarget] = useState<VersionListItem | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
-  // Version the current draft was started from in this visit (not persisted).
-  const [draftBase, setDraftBase] = useState<string | null>(null);
+  // Id of the version the draft was started from in this visit (not persisted).
+  const [draftBaseId, setDraftBaseId] = useState("");
   // Opens the n8n sync modal after a promotion, when the client has bindings.
   const [syncTarget, setSyncTarget] = useState<
     { versionId: string; versionNumber: string; versionContent: string } | null
@@ -208,9 +210,21 @@ export default function ClientDetailPage() {
   function editManually(v: VersionListItem) {
     hasEdited.current = true;
     setContent(v.content ?? "");
-    setDraftBase(v.version_number);
+    setDraftBaseId(v.id);
     setReplaceDraftTarget(null);
     setSelectedVersionId(null);
+  }
+
+  // Picked from the draft's version chip: loads that version into the editor,
+  // asking first when it would overwrite unsaved draft work.
+  function pickDraftBase(versionId: string) {
+    const v = detail?.versions.find((x) => x.id === versionId);
+    if (!v) return;
+    if ((detail?.draft_content?.trim() || hasEdited.current) && content !== v.content) {
+      setReplaceDraftTarget(v);
+    } else {
+      editManually(v);
+    }
   }
 
   async function discardDraft() {
@@ -224,7 +238,7 @@ export default function ClientDetailPage() {
       });
       if (!res.ok) throw new Error(await resError(res, "No se pudo descartar el borrador."));
       setDiscardOpen(false);
-      setDraftBase(null);
+      setDraftBaseId("");
       await load();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Error inesperado.");
@@ -924,19 +938,6 @@ export default function ClientDetailPage() {
                 >
                   Editar con IA
                 </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={<IconPencil size={14} />}
-                  onClick={() =>
-                    (hasDraft || hasEdited.current) && content !== viewingVersion.content
-                      ? setReplaceDraftTarget(viewingVersion)
-                      : editManually(viewingVersion)
-                  }
-                  disabled={busy}
-                >
-                  Editar manualmente
-                </Button>
                 {/* Push any version, not just production: a freshly bound flow
                     needs its prompt pushed once without promoting again. */}
                 <Button
@@ -976,9 +977,23 @@ export default function ClientDetailPage() {
           <section>
             <div className="version-view-head">
               <p className="editor-title" style={{ margin: 0 }}>
-                Borrador en edición{draftBase ? ` · basado en ${draftBase}` : ""}
+                Borrador en edición
               </p>
               <div className="version-view-actions">
+                <SearchableChip
+                  icon={<IconGitBranch size={13} />}
+                  placeholder="Partir de una versión"
+                  searchPlaceholder="Buscar versión…"
+                  items={detail.versions.map((v) => ({
+                    id: v.id,
+                    label: v.version_number,
+                    meta: v.is_production ? "Producción" : undefined,
+                  }))}
+                  value={draftBaseId}
+                  onChange={pickDraftBase}
+                  disabled={busy}
+                  emptyText="Sin versiones."
+                />
                 {(hasDraft || hasEdited.current) && (
                   <Button
                     variant="ghost"
