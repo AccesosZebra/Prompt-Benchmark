@@ -71,16 +71,23 @@ export type ChatSession = {
   finalized_at: string | null;
 };
 
-/** List item enriched with the client's name (resolved via join). */
-export type ChatSessionListItem = ChatSession & { client_name: string | null };
+/** List item enriched with the client's name (resolved via join). Leaves out
+ *  the draft: it is a whole prompt per session and the history never shows it. */
+export type ChatSessionListItem = Omit<ChatSession, "current_draft_content"> & {
+  client_name: string | null;
+};
 
 /** A session (with client name) plus its ordered messages. */
-export type ChatSessionDetail = ChatSessionListItem & { messages: ChatMessageRow[] };
+export type ChatSessionDetail = ChatSession & {
+  client_name: string | null;
+  messages: ChatMessageRow[];
+};
 
-const SESSION_COLS =
-  "id, client_id, type, title, status, base_version_id, current_draft_content, " +
+const LIST_COLS =
+  "id, client_id, type, title, status, base_version_id, " +
   "final_version_id, model_provider_id, model_name, source_demo_session_id, " +
   "created_at, updated_at, finalized_at";
+const SESSION_COLS = `${LIST_COLS}, current_draft_content`;
 
 const MESSAGE_COLS =
   "id, session_id, role, content, attachments, answer, tokens_in, tokens_out, created_at";
@@ -103,7 +110,7 @@ export async function listSessions({
   const sb = getSupabase();
   let query = sb
     .from("chat_sessions")
-    .select(`${SESSION_COLS}, clients(name)`)
+    .select(`${LIST_COLS}, clients(name)`)
     .eq("type", type);
   if (clientId) query = query.eq("client_id", clientId);
   query = query.order("updated_at", { ascending: false });
@@ -132,6 +139,7 @@ export async function getSession(id: string): Promise<ChatSessionDetail | null> 
 
   return {
     ...flattenListItem(session),
+    current_draft_content: session.current_draft_content,
     messages: (messages ?? []) as unknown as ChatMessageRow[],
   };
 }
