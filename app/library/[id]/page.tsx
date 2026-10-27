@@ -65,6 +65,11 @@ export default function ClientDetailPage() {
   // The version being promoted to production (opens the confirm modal).
   const [promoteTarget, setPromoteTarget] = useState<VersionListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<VersionListItem | null>(null);
+  // Version the user wants to edit by hand while a draft already exists.
+  const [replaceDraftTarget, setReplaceDraftTarget] = useState<VersionListItem | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  // Version the current draft was started from in this visit (not persisted).
+  const [draftBase, setDraftBase] = useState<string | null>(null);
   // Opens the n8n sync modal after a promotion, when the client has bindings.
   const [syncTarget, setSyncTarget] = useState<
     { versionId: string; versionNumber: string; versionContent: string } | null
@@ -124,6 +129,8 @@ export default function ClientDetailPage() {
   useEffect(() => {
     if (!detail || !hasEdited.current) return;
     const timer = setTimeout(async () => {
+      // A discard while this timer was pending must not bring the draft back.
+      if (!hasEdited.current) return;
       try {
         const res = await fetch(`/api/clients/${id}`, {
           method: "PATCH",
@@ -194,6 +201,34 @@ export default function ClientDetailPage() {
       router.push(`/editor/${session.id}`);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Error inesperado.");
+      setBusy(false);
+    }
+  }
+
+  function editManually(v: VersionListItem) {
+    hasEdited.current = true;
+    setContent(v.content ?? "");
+    setDraftBase(v.version_number);
+    setReplaceDraftTarget(null);
+    setSelectedVersionId(null);
+  }
+
+  async function discardDraft() {
+    hasEdited.current = false;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/clients/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft_content: null }),
+      });
+      if (!res.ok) throw new Error(await resError(res, "No se pudo descartar el borrador."));
+      setDiscardOpen(false);
+      setDraftBase(null);
+      await load();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Error inesperado.");
+    } finally {
       setBusy(false);
     }
   }
@@ -889,6 +924,19 @@ export default function ClientDetailPage() {
                 >
                   Editar con IA
                 </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<IconPencil size={14} />}
+                  onClick={() =>
+                    (hasDraft || hasEdited.current) && content !== viewingVersion.content
+                      ? setReplaceDraftTarget(viewingVersion)
+                      : editManually(viewingVersion)
+                  }
+                  disabled={busy}
+                >
+                  Editar manualmente
+                </Button>
                 {/* Push any version, not just production: a freshly bound flow
                     needs its prompt pushed once without promoting again. */}
                 <Button
@@ -928,16 +976,29 @@ export default function ClientDetailPage() {
           <section>
             <div className="version-view-head">
               <p className="editor-title" style={{ margin: 0 }}>
-                Borrador en edición
+                Borrador en edición{draftBase ? ` · basado en ${draftBase}` : ""}
               </p>
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={<IconReplace size={14} />}
-                onClick={() => setFindOpen((v) => !v)}
-              >
-                Buscar y reemplazar
-              </Button>
+              <div className="version-view-actions">
+                {(hasDraft || hasEdited.current) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<IconTrash size={14} />}
+                    onClick={() => setDiscardOpen(true)}
+                    disabled={busy}
+                  >
+                    Descartar cambios
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<IconReplace size={14} />}
+                  onClick={() => setFindOpen((v) => !v)}
+                >
+                  Buscar y reemplazar
+                </Button>
+              </div>
             </div>
             {findOpen && (
               <FindReplace
@@ -1080,6 +1141,51 @@ export default function ClientDetailPage() {
             ? ` (hoy la tiene ${prodLabel})`
             : ""}
           . El número de versión no cambia.
+        </p>
+      </Modal>
+
+      <Modal
+        open={Boolean(replaceDraftTarget)}
+        onClose={() => setReplaceDraftTarget(null)}
+        title={`¿Reemplazar el borrador con ${replaceDraftTarget?.version_number ?? ""}?`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setReplaceDraftTarget(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => replaceDraftTarget && editManually(replaceDraftTarget)}
+            >
+              Reemplazar
+            </Button>
+          </>
+        }
+      >
+        <p className="modal-body">
+          Ya tienes un borrador sin guardar. Si continúas, se reemplaza por el
+          contenido de esta versión y los cambios del borrador se pierden.
+        </p>
+      </Modal>
+
+      <Modal
+        open={discardOpen}
+        onClose={() => !busy && setDiscardOpen(false)}
+        title="¿Descartar los cambios del borrador?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDiscardOpen(false)} disabled={busy}>
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={discardDraft} disabled={busy}>
+              {busy ? "Descartando…" : "Descartar"}
+            </Button>
+          </>
+        }
+      >
+        <p className="modal-body">
+          Se borrará el borrador y todo quedará como antes de editar. Las
+          versiones guardadas no cambian. Esta acción no se puede deshacer.
         </p>
       </Modal>
 
