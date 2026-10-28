@@ -5,12 +5,12 @@ import { CRM_IDS } from "../crm.ts";
 
 export const clientFilterSchema = z.enum(
   ["all", "production", "editing", "legacy", "archived"],
-  { errorMap: () => ({ message: "Filtro no válido." }) },
+  { error: "Filtro no válido." },
 );
 
 export const createClientSchema = z.object({
   name: z
-    .string({ required_error: "El nombre es obligatorio." })
+    .string({ error: (iss) => (iss.input === undefined ? "El nombre es obligatorio." : undefined) })
     .trim()
     .min(1, "El nombre es obligatorio."),
   segment: z.string().trim().min(1).nullable().optional(),
@@ -21,13 +21,10 @@ export const createClientSchema = z.object({
   seedInitialVersion: z.boolean().optional(),
   // Where the agent's n8n lives. Required: both "Nuevo cliente" and "Importar
   // existente" must always ask, so the Library's host tag is never missing.
-  n8nHost: z.enum(["zebra", "own"], {
-    required_error: "Indica dónde vive el agente: n8n de Zebra o n8n propio.",
-    invalid_type_error: "Host de n8n no válido.",
-  }),
+  n8nHost: z.enum(["zebra", "own"], { error: (iss) => (iss.input === undefined ? "Indica dónde vive el agente: n8n de Zebra o n8n propio." : "Host de n8n no válido.") }),
   // Which CRM the agent runs against. Optional: only the modals that offer the
   // choice send it, the rest keep the DB default ('kommo').
-  crm: z.enum(CRM_IDS, { invalid_type_error: "CRM no válido." }).optional(),
+  crm: z.enum(CRM_IDS, { error: "CRM no válido." }).optional(),
 });
 
 /**
@@ -42,7 +39,7 @@ export const provisionClientSchema = z.object({
   templateWorkflowId: z.string().trim().min(1).optional(),
   // Which CRM's template to duplicate. Omitted, the client's stored CRM wins,
   // so the retry button on the client's page copies the right template.
-  crm: z.enum(CRM_IDS, { invalid_type_error: "CRM no válido." }).optional(),
+  crm: z.enum(CRM_IDS, { error: "CRM no válido." }).optional(),
   createChatsTable: z.boolean().default(false),
 });
 
@@ -54,7 +51,7 @@ export const updateClientSchema = z
     notes: z.string().nullable(),
     draft_content: z.string().nullable(),
     n8n_host: z.enum(["zebra", "own"]),
-    crm: z.enum(CRM_IDS, { invalid_type_error: "CRM no válido." }),
+    crm: z.enum(CRM_IDS, { error: "CRM no válido." }),
     // The client's history schema in the chats Postgres, or null to
     // disconnect. Since the August 2026 migration this carries a SCHEMA name,
     // which is the client's real name and therefore has spaces and accents

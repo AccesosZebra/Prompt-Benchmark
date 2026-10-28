@@ -1,17 +1,17 @@
 import { z } from "zod";
 
 export const bumpTypeSchema = z.enum(["major", "minor", "imported"], {
-  errorMap: () => ({ message: "bumpType no válido." }),
+  error: "bumpType no válido.",
 });
 
 export const sourceSchema = z.enum(
   ["manual", "editor_chat", "creator_chat", "imported"],
-  { errorMap: () => ({ message: "source no válido." }) },
+  { error: "source no válido." },
 );
 
 export const createVersionSchema = z
   .object({
-    content: z.string({ required_error: "content es obligatorio." }),
+    content: z.string({ error: (iss) => (iss.input === undefined ? "content es obligatorio." : undefined) }),
     bumpType: bumpTypeSchema,
     source: sourceSchema,
     versionNumberOverride: z

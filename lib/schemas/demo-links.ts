@@ -48,7 +48,7 @@ export const updateDemoLinkSchema = z
  */
 export const createClientNoteSchema = z.object({
   expected: z
-    .string({ required_error: "Dinos qué debió responder." })
+    .string({ error: (iss) => (iss.input === undefined ? "Dinos qué debió responder." : undefined) })
     .trim()
     .min(1, "Dinos qué debió responder.")
     .max(4000, "La respuesta es demasiado larga."),

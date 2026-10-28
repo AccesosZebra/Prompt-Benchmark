@@ -2,11 +2,11 @@ import { z } from "zod";
 
 export const createConnectionSchema = z.object({
   name: z
-    .string({ required_error: "El nombre es obligatorio." })
+    .string({ error: (iss) => (iss.input === undefined ? "El nombre es obligatorio." : undefined) })
     .trim()
     .min(1, "El nombre es obligatorio."),
   base_url: z.string().url("La URL base debe ser una URL válida."),
-  api_key: z.string({ required_error: "La API key es obligatoria." }).trim().min(1, "La API key es obligatoria."),
+  api_key: z.string({ error: (iss) => (iss.input === undefined ? "La API key es obligatoria." : undefined) }).trim().min(1, "La API key es obligatoria."),
   // Set when it is the client's own n8n, created from that client's page.
   client_id: z.string().uuid().nullable().optional(),
 });
@@ -50,7 +50,7 @@ export const createApiBindingSchema = z.object({
 
 export const createManualBindingSchema = z.object({
   manual_label: z
-    .string({ required_error: "La etiqueta es obligatoria." })
+    .string({ error: (iss) => (iss.input === undefined ? "La etiqueta es obligatoria." : undefined) })
     .trim()
     .min(1, "La etiqueta es obligatoria."),
 });

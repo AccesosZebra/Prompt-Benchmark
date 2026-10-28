@@ -27,7 +27,7 @@ export function jsonError(message: string, status: number) {
  */
 export function handleError(err: unknown) {
   if (err instanceof ZodError) {
-    const msg = err.errors.map((e) => e.message).join("; ");
+    const msg = err.issues.map((e) => e.message).join("; ");
     return jsonError(`Datos inválidos: ${msg}`, 400);
   }
   if (err instanceof UnsupportedFileError) {

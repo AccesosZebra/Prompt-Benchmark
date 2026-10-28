@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /** OpenAI's constraint on a function name, and what the model will say back. */
 const toolName = z
-  .string({ required_error: "El nombre es obligatorio." })
+  .string({ error: (iss) => (iss.input === undefined ? "El nombre es obligatorio." : undefined) })
   .trim()
   .regex(
     /^[a-zA-Z0-9_-]{1,64}$/,
@@ -12,7 +12,7 @@ const toolName = z
 const paramSchema = z.object({
   name: toolName,
   description: z
-    .string({ required_error: "Describe el parámetro." })
+    .string({ error: (iss) => (iss.input === undefined ? "Describe el parámetro." : undefined) })
     .trim()
     .min(1, "Describe el parámetro: es lo que lee el modelo para rellenarlo."),
   type: z.enum(["string", "number", "boolean"]),
@@ -32,7 +32,7 @@ const bodyTemplateSchema = z.record(z.string(), z.unknown());
 export const createToolSchema = z.object({
   name: toolName,
   description: z
-    .string({ required_error: "La descripción es obligatoria." })
+    .string({ error: (iss) => (iss.input === undefined ? "La descripción es obligatoria." : undefined) })
     .trim()
     .min(1, "La descripción es obligatoria: decide si el modelo usa la herramienta."),
   url: z.string().url("La URL debe ser una URL válida."),

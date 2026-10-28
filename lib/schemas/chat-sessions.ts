@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const sessionTypeSchema = z.enum(["editor", "creator"], {
-  errorMap: () => ({ message: "Tipo de sesión no válido." }),
+  error: "Tipo de sesión no válido.",
 });
 
 // Editor sessions belong to a client from the start and edit that client's
@@ -57,7 +57,7 @@ export const answerSchema = z.object({
 
 export const appendMessageSchema = z.object({
   content: z
-    .string({ required_error: "El mensaje es obligatorio." })
+    .string({ error: (iss) => (iss.input === undefined ? "El mensaje es obligatorio." : undefined) })
     .trim()
     .min(1, "El mensaje es obligatorio."),
   attachments: z.array(attachmentSchema).optional(),
@@ -67,7 +67,7 @@ export const appendMessageSchema = z.object({
 // Manual edit of the session's working draft (no AI turn). Empty string is
 // allowed so the draft can be cleared.
 export const updateDraftSchema = z.object({
-  draftContent: z.string({ required_error: "El borrador es obligatorio." }),
+  draftContent: z.string({ error: (iss) => (iss.input === undefined ? "El borrador es obligatorio." : undefined) }),
 });
 
 // A Creator session lands either on a client that already exists (clientId) or

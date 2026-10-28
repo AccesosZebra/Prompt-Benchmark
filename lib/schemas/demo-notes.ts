@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const createDemoNoteSchema = z.object({
   text: z
-    .string({ required_error: "La nota es obligatoria." })
+    .string({ error: (iss) => (iss.input === undefined ? "La nota es obligatoria." : undefined) })
     .trim()
     .min(1, "La nota es obligatoria."),
   messageIds: z.array(z.string().uuid()).default([]),
