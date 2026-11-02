@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  deadlineEntry,
   pushLog,
   restoreLog,
   finishedTurns,
@@ -72,4 +73,42 @@ test("restoreLog prunes by age and survives junk in storage", () => {
     ["keep"],
   );
   assert.deepEqual(restoreLog(null, NOW), []);
+});
+
+const notice = {
+  link_id: "abc",
+  client_name: "Vero Lozano",
+  round_label: "v3",
+  expires_on: "2026-11-05",
+  stage: "warning" as const,
+};
+
+test("deadlineEntry names the client, the day and where to go", () => {
+  const e = deadlineEntry(notice, NOW);
+  assert.match(e.text, /Vero Lozano: la demo cierra el jueves/);
+  assert.equal(e.href, "/lab/demo/abc");
+  assert.equal(e.kind, "deadline");
+  assert.equal(e.emphasis, "Vero Lozano");
+});
+
+test("deadlineEntry says today on the last day", () => {
+  assert.match(deadlineEntry({ ...notice, stage: "closing" }, NOW).text, /cierra hoy/);
+});
+
+test("the same notice polled twice is one history entry, and each stage is its own", () => {
+  const first = pushLog([], [deadlineEntry(notice, NOW)], NOW);
+  assert.equal(pushLog(first, [deadlineEntry(notice, NOW + 30_000)], NOW), first);
+  const both = pushLog(first, [deadlineEntry({ ...notice, stage: "closing" }, NOW)], NOW);
+  assert.equal(both.length, 2);
+});
+
+test("a moved deadline announces again", () => {
+  const first = pushLog([], [deadlineEntry(notice, NOW)], NOW);
+  const moved = pushLog(first, [deadlineEntry({ ...notice, expires_on: "2026-11-12" }, NOW)], NOW);
+  assert.equal(moved.length, 2);
+});
+
+test("restoreLog keeps a deadline entry's own kind", () => {
+  const [restored] = restoreLog([deadlineEntry(notice, NOW)], NOW);
+  assert.equal(restored.kind, "deadline");
 });

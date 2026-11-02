@@ -72,6 +72,48 @@ export function businessDaysFrom(from: string, count: number): string {
   return toISO(ms);
 }
 
+/** The last business day strictly before `iso`: a Monday, Saturday or Sunday
+ *  all give the Friday before. */
+export function previousBusinessDay(iso: string): string {
+  let ms = atNoon(iso) - DAY_MS;
+  while (isWeekend(ms)) ms -= DAY_MS;
+  return toISO(ms);
+}
+
+/** The hour of day in Mexico City, 0 to 23. */
+export function hourInMexico(now: number = Date.now()): number {
+  return Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Mexico_City",
+      hour: "numeric",
+      hourCycle: "h23",
+    }).format(new Date(now)),
+  );
+}
+
+/** When the team starts reading Chat, so a notice lands at the start of the day. */
+const NOTICE_HOUR = 9;
+
+export type DeadlineStage = "warning" | "closing";
+
+/**
+ * Which notice a deadline is due right now, if any: "warning" on the business
+ * day before it, "closing" on the last day itself.
+ *
+ * Exact days on purpose. A link already past its date matches neither, so
+ * shipping this does not announce every old link at once, and a notice missed
+ * for a whole day stays missed rather than arriving when it no longer helps.
+ */
+export function deadlineStage(
+  expiresOn: string | null,
+  now: number = Date.now(),
+): DeadlineStage | null {
+  if (!expiresOn || hourInMexico(now) < NOTICE_HOUR) return null;
+  const today = todayInMexico(now);
+  if (today === expiresOn) return "closing";
+  return today === previousBusinessDay(expiresOn) ? "warning" : null;
+}
+
 /** Null means no deadline: the link stays open until someone closes it. */
 export function isExpired(expiresOn: string | null, now: number = Date.now()): boolean {
   if (!expiresOn) return false;

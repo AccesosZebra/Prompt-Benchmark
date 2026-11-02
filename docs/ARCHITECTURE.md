@@ -626,6 +626,16 @@ the old name, and archiving a client deletes neither.
     escape the login. `middleware.test.ts` walks the route tree and fails if one
     appears.
 
+- **Demo deadline notices**: `instrumentation.ts` starts a 5 minute timer when
+  the production server boots, the app's only scheduled work.
+  `notifyDemoDeadlines` (`lib/google-chat/notify.ts`) posts to the configured
+  Chat space on the business day before `expires_on` and on the last day, from
+  9:00 Mexico City time. `demo_links.warned_for` and `closing_notified_for` hold
+  the date each notice went out for, so a moved deadline re-arms it, and a
+  conditional update is what stops two sweeps sending twice. The bell derives
+  the same notices from the date on each poll, so it works with Chat off. No
+  route and no secret are involved, so this adds nothing to the public surface.
+
 - **In-app auth (Sprint 10)**: the app owns the whole flow, no external auth
   service. `middleware.ts` (Edge runtime) guards every route except the login
   page, the OAuth callback, `/api/auth/*`, and the client demo link. Flow:

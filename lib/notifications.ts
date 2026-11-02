@@ -9,10 +9,22 @@
  * with read state) is the upgrade if the team needs the same history on two
  * machines or wants it to survive clearing site data.
  */
+import { formatDeadlineEs, type DeadlineStage } from "./business-days.ts";
+
 /** What produced the entry, which is all the bell needs to pick its icon.
  *  Optional on `NotifEntry`: entries logged before this shipped are already in
  *  localStorage without it and still render, just without an icon. */
-export type NotifKind = "editor" | "creator" | "note";
+export type NotifKind = "editor" | "creator" | "note" | "deadline";
+
+/** A demo with a notice due right now. Worked out from the date on every poll,
+ *  so the bell shows it even when Google Chat is off. */
+export type DeadlineNotice = {
+  link_id: string;
+  client_name: string | null;
+  round_label: string;
+  expires_on: string;
+  stage: DeadlineStage;
+};
 
 export type NotifEntry = {
   /** Stable per event, so a re-poll of the same fact never logs it twice. */
@@ -50,7 +62,23 @@ export function pushLog(
   return fresh.length === 0 && next.length === log.length ? log : next;
 }
 
-const TITLE_RE = /la respuesta de (.+) está lista\.$/;
+/** A notice as the bell tells it. The id carries the date and the stage, so a
+ *  re-poll is the same entry while a moved deadline is a new one. */
+export function deadlineEntry(notice: DeadlineNotice, at: number): NotifEntry {
+  const name = notice.client_name ?? "Un cliente";
+  const when =
+    notice.stage === "closing" ? "hoy" : `el ${formatDeadlineEs(notice.expires_on)}`;
+  return {
+    id: `deadline-${notice.link_id}-${notice.expires_on}-${notice.stage}`,
+    at,
+    text: `${name}: la demo cierra ${when}.`,
+    href: `/lab/demo/${notice.link_id}`,
+    kind: "deadline",
+    emphasis: name,
+  };
+}
+
+const TITLE_RE =/la respuesta de (.+) está lista\.$/;
 
 /** Fills in what an entry written before `kind` and `emphasis` existed cannot
  *  carry. The sentences are ours (see the bell), so reading one back to find

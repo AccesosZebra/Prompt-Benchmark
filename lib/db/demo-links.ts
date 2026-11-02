@@ -16,6 +16,8 @@ import { getVersion } from "./versions";
 import { getRoleDefault } from "./role-defaults";
 import { RoleNotConfiguredError } from "./runs";
 import { LINK_TOKEN_BYTES, randomToken } from "../auth/signed-token.ts";
+import { deadlineStage, todayInMexico } from "../business-days.ts";
+import type { DeadlineNotice } from "../notifications.ts";
 
 export type DemoLinkStatus = "active" | "closed";
 
@@ -296,9 +298,69 @@ export async function deleteAllLinks(): Promise<void> {
   if (error) throw new Error(`No se pudo vaciar el historial: ${error.message}`);
 }
 
+/** Open links with a notice due right now. A link someone closed by hand is
+ *  left out: whoever closed it already knows. */
+export async function listDeadlineNotices(now: number = Date.now()): Promise<DeadlineNotice[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("demo_links")
+    .select("id, label, version_number_snapshot, expires_on, clients(name)")
+    .eq("status", "active")
+    .gte("expires_on", todayInMexico(now));
+  if (error) throw new Error(`No se pudieron revisar los plazos: ${error.message}`);
+
+  return (data ?? []).flatMap((row: any) => {
+    const stage = deadlineStage(row.expires_on, now);
+    if (!stage) return [];
+    const client = Array.isArray(row.clients) ? row.clients[0] : row.clients;
+    return [
+      {
+        link_id: row.id,
+        client_name: client?.name ?? null,
+        round_label: row.label ?? `v${row.version_number_snapshot}`,
+        expires_on: row.expires_on,
+        stage,
+      },
+    ];
+  });
+}
+
+const NOTICE_COLUMN = { warning: "warned_for", closing: "closing_notified_for" } as const;
+
+/**
+ * Takes the right to send a notice, or returns false if it was already taken.
+ * One conditional update, so two sweeps at once cannot both win. The column
+ * holds the date it was sent for: a moved deadline no longer matches it, which
+ * is what re-arms the notice.
+ */
+export async function claimDeadlineNotice(notice: DeadlineNotice): Promise<boolean> {
+  const column = NOTICE_COLUMN[notice.stage];
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("demo_links")
+    .update({ [column]: notice.expires_on })
+    .eq("id", notice.link_id)
+    .eq("expires_on", notice.expires_on)
+    .or(`${column}.is.null,${column}.neq.${notice.expires_on}`)
+    .select("id");
+  if (error) throw new Error(`No se pudo reservar el aviso: ${error.message}`);
+  return (data ?? []).length > 0;
+}
+
+/** Gives a claimed notice back after a failed send, so the next sweep retries. */
+export async function releaseDeadlineNotice(notice: DeadlineNotice): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("demo_links")
+    .update({ [NOTICE_COLUMN[notice.stage]]: null })
+    .eq("id", notice.link_id);
+  if (error) throw new Error(`No se pudo liberar el aviso: ${error.message}`);
+}
+
 export type PendingNotesSummary = {
   total: number;
   by_link: { link_id: string; client_name: string | null; label: string | null; count: number }[];
+  deadlines: DeadlineNotice[];
 };
 
 /**
@@ -331,5 +393,9 @@ export async function pendingNotesSummary(): Promise<PendingNotesSummary> {
   }
 
   const list = [...byLink.values()].sort((a, b) => b.count - a.count);
-  return { total: list.reduce((n, l) => n + l.count, 0), by_link: list };
+  return {
+    total: list.reduce((n, l) => n + l.count, 0),
+    by_link: list,
+    deadlines: await listDeadlineNotices(),
+  };
 }

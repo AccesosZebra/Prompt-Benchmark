@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { IconBell, IconPencil, IconSparkles, IconUser } from "@tabler/icons-react";
+import { IconBell, IconClock, IconPencil, IconSparkles, IconUser } from "@tabler/icons-react";
 
 import {
+  deadlineEntry,
   pushLog,
   restoreLog,
   finishedTurns,
   LOG_KEY,
+  type DeadlineNotice,
   type NotifEntry,
   type NotifKind,
 } from "@/lib/notifications";
@@ -35,7 +37,7 @@ type PendingLink = {
   count: number;
 };
 
-type Summary = { total: number; by_link: PendingLink[] };
+type Summary = { total: number; by_link: PendingLink[]; deadlines: DeadlineNotice[] };
 
 const GENERATING_POLL_MS = 5_000;
 const NOTES_POLL_MS = 30_000;
@@ -101,8 +103,15 @@ function modeLabel(mode: Turn["mode"]) {
 /** Same icon a section wears in the header nav, so an entry says where it came
  *  from before the sentence is read. A client's report is the third origin and
  *  has no nav item of its own: it is a person, not a section. */
+const NOTIF_ICONS = {
+  editor: IconPencil,
+  creator: IconSparkles,
+  note: IconUser,
+  deadline: IconClock,
+} satisfies Record<NotifKind, typeof IconBell>;
+
 function NotifIcon({ kind }: { kind: NotifKind }) {
-  const Icon = kind === "creator" ? IconSparkles : kind === "note" ? IconUser : IconPencil;
+  const Icon = NOTIF_ICONS[kind];
   return <Icon className="notif-icon" size={14} stroke={1.5} />;
 }
 
@@ -175,12 +184,15 @@ function notify(title: string, body: string, tag: string, href: string) {
 
 export function NotificationsBell() {
   const [running, setRunning] = useState<Turn[]>([]);
-  const [summary, setSummary] = useState<Summary>({ total: 0, by_link: [] });
+  const [summary, setSummary] = useState<Summary>({ total: 0, by_link: [], deadlines: [] });
   const [log, setLog] = useState<NotifEntry[]>([]);
   const [open, setOpen] = useState(false);
   const [finished, setFinished] = useState<Turn | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstNotesPoll = useRef(true);
+  // Next to the log, not instead of it: with storage blocked the log forgets
+  // between polls, and a chime every thirty seconds would be the result.
+  const announcedDeadlines = useRef(new Set<string>());
 
   /** One place where an announced event becomes history, so the log and the
    *  browser notification can never disagree about what happened. */
@@ -274,6 +286,17 @@ export function NotificationsBell() {
       ]);
       notify(text, "Ábrelo en Lab para revisarlo.", "demo-pending-notes", linkHref(top));
     }
+    // Announced once per deadline and stage, across reloads: the stored log is
+    // what remembers, since these stay in the response all day.
+    const logged = new Set(restoreLog(readJson<NotifEntry[]>(LOG_KEY, [])).map((e) => e.id));
+    const newDeadlines = current.deadlines
+      .map((notice) => deadlineEntry(notice, Date.now()))
+      .filter((e) => !logged.has(e.id) && !announcedDeadlines.current.has(e.id));
+    record(newDeadlines);
+    for (const entry of newDeadlines) {
+      announcedDeadlines.current.add(entry.id);
+      notify(entry.text, "Ábrela en Lab para revisarla.", entry.id, entry.href);
+    }
     writeSeenNotes(current.total);
     setSummary(current);
     firstNotesPoll.current = false;
@@ -302,8 +325,9 @@ export function NotificationsBell() {
   }, [pollGenerating, pollNotes]);
 
   // The count is what is still waiting on someone, not how much has been
-  // announced: reports nobody has reviewed, and turns still generating.
-  const pending = summary.total + running.length;
+  // announced: reports nobody has reviewed, demos about to close, and turns
+  // still generating.
+  const pending = summary.total + summary.deadlines.length + running.length;
 
   return (
     <div className="notif">
@@ -346,6 +370,17 @@ export function NotificationsBell() {
                     </span>
                   </a>
                 ))}
+                {summary.deadlines.map((notice) => {
+                  const entry = deadlineEntry(notice, 0);
+                  return (
+                    <a key={entry.id} className="notif-item notif-item-pending" href={entry.href}>
+                      <NotifIcon kind="deadline" />
+                      <span className="notif-item-text">
+                        {emphasized(entry.text, entry.emphasis)}
+                      </span>
+                    </a>
+                  );
+                })}
                 {running.map((turn) => (
                   <a
                     key={turn.sessionId}

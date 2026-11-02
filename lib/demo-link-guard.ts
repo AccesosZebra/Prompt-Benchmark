@@ -107,9 +107,10 @@ export async function openDemoContext(
     );
   }
   // The deadline is checked here rather than flipped into `status` by a
-  // scheduler this project does not have. One comparison, and it can never be
-  // stale: the moment the date passes, every public route stops. Saying which
-  // day it closed separates "the time ran out" from "we closed it".
+  // scheduled job, whose lag would leave a past link open. One comparison, and
+  // it can never be stale: the moment the date passes, every public route
+  // stops. Saying which day it closed separates "the time ran out" from "we
+  // closed it".
   if (isExpired(link.expires_on)) {
     throw new DemoLinkError(
       `El plazo para dejar reportes terminó el ${formatDeadlineEs(link.expires_on!)}. Escríbenos si necesitas seguir probando.`,

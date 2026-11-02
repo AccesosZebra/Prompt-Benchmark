@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildNoteMessage } from "./message.ts";
+import { buildDeadlineMessage, buildNoteMessage } from "./message.ts";
 
 const base = {
   clientName: "Vero Lozano",
@@ -45,4 +45,34 @@ test("long text is flattened and cut", () => {
   const line = msg.split("\n").find((l) => l.startsWith("*Debió responder:*"))!;
   assert.ok(line.length < 340, line.length.toString());
   assert.match(line, /…$/);
+});
+
+const deadline = {
+  stage: "warning" as const,
+  clientName: "Vero Lozano",
+  roundLabel: "Primera ronda, agosto",
+  expiresOn: "2026-11-05",
+  url: "https://studio.zebra.mx/lab/demo/abc",
+};
+
+test("the warning says who, which round, which day and the way in", () => {
+  const msg = buildDeadlineMessage(deadline);
+  assert.match(msg, /Demo por cerrar · Vero Lozano/);
+  assert.match(msg, /Primera ronda, agosto/);
+  assert.match(msg, /jueves, 5 de noviembre|jueves 5 de noviembre/);
+  assert.match(msg, /<https:\/\/studio\.zebra\.mx\/lab\/demo\/abc\|Abrir la demo>/);
+});
+
+test("the closing notice says it closes today", () => {
+  const msg = buildDeadlineMessage({ ...deadline, stage: "closing" });
+  assert.match(msg, /La demo cierra hoy · Vero Lozano/);
+  assert.doesNotMatch(msg, /Demo por cerrar/);
+});
+
+test("no origin, no link", () => {
+  assert.doesNotMatch(buildDeadlineMessage({ ...deadline, url: null }), /Abrir la demo/);
+});
+
+test("an unknown client still reads as a sentence", () => {
+  assert.match(buildDeadlineMessage({ ...deadline, clientName: null }), /Demo por cerrar · Cliente/);
 });
