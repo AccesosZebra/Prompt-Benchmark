@@ -4765,10 +4765,18 @@ button.note-ref {
   display: block;
   width: 100%;
   font-family: inherit;
+  transition: box-shadow 0.15s ease;
 }
-button.note-ref:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+button.note-ref:focus-visible,
+.notes-other-toggle:focus-visible,
+.notes-round-label button:focus-visible,
+.note-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+/* Focused by a jump, not by tabbing: the flash already says where it is. */
+.note-card:focus:not(:focus-visible) {
+  outline: none;
 }
 .note-ref-go {
   color: var(--accent);
@@ -4784,17 +4792,23 @@ button.note-ref:focus-visible {
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--faint);
+  color: var(--muted);
 }
 .notes-round-label button {
-  margin-left: auto;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  margin: -4px -6px -4px auto;
+  padding: 0 6px;
   border: none;
+  border-radius: 6px;
   background: none;
   font: inherit;
   letter-spacing: 0.1em;
   color: var(--muted);
   cursor: pointer;
+  transition: box-shadow 0.15s ease;
 }
 .notes-round-label button:hover {
   color: var(--accent);
@@ -4828,21 +4842,26 @@ button.note-ref:focus-visible {
   white-space: nowrap;
   color: var(--muted);
   cursor: pointer;
+  transition: box-shadow 0.15s ease;
 }
 .notes-other-toggle:hover {
   color: var(--fg);
 }
-.notes-other-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+/* The count of pending ones never gets cut; the label gives way first. */
+.notes-other-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .notes-other-chevron {
+  flex: none;
   transition: transform 0.2s ease;
 }
 .notes-other-toggle[aria-expanded="true"] .notes-other-chevron {
   transform: rotate(180deg);
 }
 .notes-other-pending {
+  flex: none;
   margin-left: auto;
   letter-spacing: 0.08em;
   color: var(--accent);
@@ -4858,6 +4877,21 @@ button.note-ref:focus-visible {
 }
 .notes-other-body[hidden] {
   display: none;
+}
+/* No motion, same information: the chevron snaps, and a jumped-to message or
+   report holds a still highlight for the flash's duration instead of pulsing. */
+@media (prefers-reduced-motion: reduce) {
+  .notes-other-chevron,
+  button.note-ref,
+  .notes-other-toggle,
+  .notes-round-label button {
+    transition: none;
+  }
+  .chat-turn.is-flashed .chat-msg,
+  .playground-chat .chat-bubble.is-flashed {
+    animation: none;
+    background: color-mix(in srgb, var(--accent) 25%, var(--surface2));
+  }
 }
 
 /* Playground version switcher row in the session header (Sprint 8, T6). */

@@ -57,18 +57,29 @@ export function DemoLinkWorkspace({
   const listRef = useRef<HTMLDivElement>(null);
   const otherToggleRef = useRef<HTMLButtonElement>(null);
 
+  /** Read aloud by screen readers: a jump changes what is on screen without
+   *  moving the reader there by itself. */
+  const [announcement, setAnnouncement] = useState("");
+
   // Same scroll and flash as the Playground's jumpToMessage / jumpToNote.
   useEffect(() => {
     if (!pendingJump) return;
     const { messageId, noteId } = pendingJump;
     setPendingJump(null);
+    const behavior: ScrollBehavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth";
     if (messageId) {
-      messageRefs.current[messageId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      messageRefs.current[messageId]?.scrollIntoView({ behavior, block: "center" });
       setFlashMessageId(messageId);
       window.setTimeout(() => setFlashMessageId((cur) => (cur === messageId ? null : cur)), 1600);
     }
     if (noteId) {
-      noteRefs.current[noteId]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      const el = noteRefs.current[noteId];
+      el?.scrollIntoView({ behavior, block: "nearest" });
+      // The card may have just moved groups and been remounted, which drops
+      // keyboard focus on the page. Land it on the report instead.
+      el?.focus({ preventScroll: true });
       setFlashNoteId(noteId);
       window.setTimeout(() => setFlashNoteId((cur) => (cur === noteId ? null : cur)), 1600);
     }
@@ -204,9 +215,13 @@ export function DemoLinkWorkspace({
   function jumpToQuote(noteId: string, messageId: string) {
     const r = messageById.get(messageId)?.round;
     if (r === undefined || !byRound.has(r)) return;
-    if (r === activeRound) return setPendingJump({ messageId });
+    if (r === activeRound) {
+      setAnnouncement("Mensaje resaltado en el chat.");
+      return setPendingJump({ messageId });
+    }
     // The report follows its message into the new conversation's group.
     setRound(r);
+    setAnnouncement(`${conversationName(r)} abierta, mensaje resaltado en el chat.`);
     setPendingJump({ messageId, noteId });
   }
 
@@ -228,7 +243,8 @@ export function DemoLinkWorkspace({
       const row = otherToggleRef.current;
       if (!list || !row) return;
       const top = list.scrollTop + row.getBoundingClientRect().top - list.getBoundingClientRect().top;
-      list.scrollTo({ top, behavior: "smooth" });
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      list.scrollTo({ top, behavior: reduce ? "auto" : "smooth" });
     });
   }
 
@@ -317,7 +333,7 @@ export function DemoLinkWorkspace({
                 onClick={toggleOthers}
               >
                 <IconChevronDown size={14} className="notes-other-chevron" />
-                Otras conversaciones · {others.length}
+                <span className="notes-other-label">Otras conversaciones · {others.length}</span>
                 {othersPending > 0 && (
                   <span className="notes-other-pending">{othersPending} sin revisar</span>
                 )}
@@ -330,7 +346,8 @@ export function DemoLinkWorkspace({
                       <p className="notes-round-label">
                         {conversationName(r)}
                         <button type="button" onClick={() => setRound(r)}>
-                          Abrir →
+                          Abrir
+                          <IconArrowRight size={12} />
                         </button>
                       </p>
                       {others.filter((n) => n.round === r).map(card)}
@@ -340,6 +357,10 @@ export function DemoLinkWorkspace({
             </div>
           )}
         </div>
+
+        <p className="visually-hidden" aria-live="polite">
+          {announcement}
+        </p>
 
         {error && <p className="form-error">{error}</p>}
 

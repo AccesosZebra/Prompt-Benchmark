@@ -92,7 +92,12 @@ export function NoteCard({
         : "Descartada";
 
   return (
-    <div ref={cardRef} className={`note-card${flashed ? " is-flashed" : ""}`}>
+    <div
+      ref={cardRef}
+      // Focusable only by script, so a jump can land the keyboard on it.
+      tabIndex={cardRef ? -1 : undefined}
+      className={`note-card${flashed ? " is-flashed" : ""}`}
+    >
       <div className="note-head">
         <span className="chat-pin note-index">{index}</span>
         {note.message_ids.length === 0 && <span className="note-general">General</span>}
