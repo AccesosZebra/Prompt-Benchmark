@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { counterpartOf, quotedWithContext } from "./note-context.ts";
+import { counterpartOf, noteRound, quotedWithContext } from "./note-context.ts";
 import type { DemoMessageRow } from "./db/demo-sessions.ts";
 
 /** A conversation shaped like a real one: the bot opens, the lead answers, the
@@ -106,4 +106,21 @@ test("an id that no longer resolves keeps its place instead of vanishing", () =>
 test("a message from another session is never anyone's pair", () => {
   const other = msg("other-lead", "human", 2, 1, "s2");
   assert.equal(counterpartOf(at("bot-a"), [...CHAT, other])?.id, "lead-1");
+});
+
+test("a note belongs to the conversation of the message it tagged", () => {
+  assert.equal(noteRound({ message_ids: ["r2-lead"], created_at: "2026-01-01T00:00:00Z" }, CHAT), 2);
+});
+
+test("a general note, or one whose tag is gone, belongs to the conversation running when it was written", () => {
+  const timed = [
+    { ...at("greeting"), created_at: "2026-08-26T10:00:00Z" },
+    { ...at("lead-1"), created_at: "2026-08-26T10:05:00Z" },
+    { ...at("r2-greeting"), created_at: "2026-08-26T11:00:00Z" },
+  ];
+  assert.equal(noteRound({ message_ids: [], created_at: "2026-08-26T10:30:00Z" }, timed), 1);
+  assert.equal(noteRound({ message_ids: [], created_at: "2026-08-26T11:30:00Z" }, timed), 2);
+  assert.equal(noteRound({ message_ids: ["gone"], created_at: "2026-08-26T11:30:00Z" }, timed), 2);
+  // Written before anything on record: the latest conversation, not a made up one.
+  assert.equal(noteRound({ message_ids: [], created_at: "2026-08-25T00:00:00Z" }, timed), 2);
 });

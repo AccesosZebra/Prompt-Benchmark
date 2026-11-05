@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { IconArrowRight, IconNotes } from "@tabler/icons-react";
+import { IconArrowRight, IconChevronDown, IconNotes } from "@tabler/icons-react";
 
 import type { DemoSessionDetail } from "@/lib/db/demo-sessions";
 import type { DemoNoteRow } from "@/lib/db/demo-notes";
 import { messagePreview } from "@/lib/adversarial-message";
-import { quotedWithContext } from "@/lib/note-context";
+import { noteRound, quotedWithContext } from "@/lib/note-context";
 import { DemoTurn } from "@/components/demo/DemoTurn";
 import { NoteCard, type NoteReviewPatch } from "@/components/demo/NoteCard";
 import { RoundStack, type RoundSummary } from "@/components/demo/RoundStack";
@@ -43,11 +43,43 @@ export function DemoLinkWorkspace({
   /** Which of the visitor's conversations is on screen. Null means the last
    *  one, which is what they were doing when they stopped. */
   const [round, setRound] = useState<number | null>(null);
+  /** Reports from the conversations not on screen live folded under one row. */
+  const [otherOpen, setOtherOpen] = useState(false);
+  const [flashMessageId, setFlashMessageId] = useState<string | null>(null);
+  const [flashNoteId, setFlashNoteId] = useState<string | null>(null);
+  /** A jump waits one render: when it changes conversation, its message is not
+   *  on screen until the new round is. */
+  const [pendingJump, setPendingJump] = useState<{ messageId?: string; noteId?: string } | null>(
+    null,
+  );
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const noteRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const listRef = useRef<HTMLDivElement>(null);
+  const otherToggleRef = useRef<HTMLButtonElement>(null);
+
+  // Same scroll and flash as the Playground's jumpToMessage / jumpToNote.
+  useEffect(() => {
+    if (!pendingJump) return;
+    const { messageId, noteId } = pendingJump;
+    setPendingJump(null);
+    if (messageId) {
+      messageRefs.current[messageId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setFlashMessageId(messageId);
+      window.setTimeout(() => setFlashMessageId((cur) => (cur === messageId ? null : cur)), 1600);
+    }
+    if (noteId) {
+      noteRefs.current[noteId]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      setFlashNoteId(noteId);
+      window.setTimeout(() => setFlashNoteId((cur) => (cur === noteId ? null : cur)), 1600);
+    }
+  }, [pendingJump]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setRound(null);
+    setOtherOpen(false);
+    setPendingJump(null);
     try {
       const res = await fetch(`/api/demo-links/${linkId}/sessions/${sessionId}`);
       if (!res.ok) throw new Error(await resError(res, "No se pudo cargar."));
@@ -156,6 +188,72 @@ export function DemoLinkWorkspace({
     }
   });
 
+  // Numbered before splitting, so a report keeps its pin's number whichever
+  // group it lands in.
+  const numbered = notes.map((note, i) => ({
+    note,
+    index: i + 1,
+    round: noteRound(note, allMessages),
+  }));
+  const here = numbered.filter((n) => n.round === activeRound);
+  const others = numbered.filter((n) => n.round !== activeRound);
+  const othersPending = others.filter((n) => n.note.status === "pending").length;
+  const conversationName = (r: number) => `Conversación ${roundNumbers.indexOf(r) + 1 || r}`;
+  const messageById = new Map(allMessages.map((m) => [m.id, m]));
+
+  function jumpToQuote(noteId: string, messageId: string) {
+    const r = messageById.get(messageId)?.round;
+    if (r === undefined || !byRound.has(r)) return;
+    if (r === activeRound) return setPendingJump({ messageId });
+    // The report follows its message into the new conversation's group.
+    setRound(r);
+    setPendingJump({ messageId, noteId });
+  }
+
+  function jumpToNote(noteIndex: number) {
+    const n = numbered[noteIndex];
+    if (!n) return;
+    if (n.round !== activeRound) setOtherOpen(true);
+    setPendingJump({ noteId: n.note.id });
+  }
+
+  function toggleOthers() {
+    const opening = !otherOpen;
+    setOtherOpen(opening);
+    if (!opening) return;
+    // Bring the row to the top of the list so what it just opened is in view.
+    // Scrolling the list only, not the page.
+    requestAnimationFrame(() => {
+      const list = listRef.current;
+      const row = otherToggleRef.current;
+      if (!list || !row) return;
+      const top = list.scrollTop + row.getBoundingClientRect().top - list.getBoundingClientRect().top;
+      list.scrollTo({ top, behavior: "smooth" });
+    });
+  }
+
+  const card = ({ note, index }: (typeof numbered)[number]) => (
+    <NoteCard
+      key={note.id}
+      note={note}
+      index={index}
+      quotes={quotedWithContext(note.message_ids, allMessages).map((q) => ({
+        id: q.id,
+        preview: q.message ? messagePreview(q.message.content) : "(mensaje no disponible)",
+        stale: !currentIds.has(q.id),
+        context: q.isContext,
+        where: q.message ? conversationName(q.message.round) : undefined,
+      }))}
+      busy={busyNoteId === note.id}
+      onReview={(patch) => review(note, patch)}
+      onJumpToQuote={(mid) => jumpToQuote(note.id, mid)}
+      flashed={flashNoteId === note.id}
+      cardRef={(el) => {
+        noteRefs.current[note.id] = el;
+      }}
+    />
+  );
+
   return (
     <div className="playground-layout">
       <div className="playground-chat">
@@ -173,6 +271,11 @@ export function DemoLinkWorkspace({
               role={m.role}
               content={m.content}
               pins={pinsByMessage.get(m.id) ?? []}
+              flashed={flashMessageId === m.id}
+              onJumpToNote={jumpToNote}
+              registerRef={(id, el) => {
+                messageRefs.current[id] = el;
+              }}
             />
           ))}
         </div>
@@ -186,7 +289,7 @@ export function DemoLinkWorkspace({
           {notes.length > 0 && <span className="notes-count">{notes.length}</span>}
         </div>
 
-        <div className="notes-list">
+        <div className="notes-list" ref={listRef}>
           {notes.length === 0 && (
             <EmptyState
               icon={<IconNotes size={22} />}
@@ -194,21 +297,48 @@ export function DemoLinkWorkspace({
               description="Esta persona conversó pero no reportó nada."
             />
           )}
-          {notes.map((note, i) => (
-            <NoteCard
-              key={note.id}
-              note={note}
-              index={i + 1}
-              quotes={quotedWithContext(note.message_ids, allMessages).map((q) => ({
-                id: q.id,
-                preview: q.message ? messagePreview(q.message.content) : "(mensaje no disponible)",
-                stale: !currentIds.has(q.id),
-                context: q.isContext,
-              }))}
-              busy={busyNoteId === note.id}
-              onReview={(patch) => review(note, patch)}
-            />
-          ))}
+          {notes.length > 0 && (
+            <>
+              <p className="notes-round-label">Esta conversación · {here.length}</p>
+              {here.length === 0 && (
+                <p className="notes-group-empty">Sin reportes en esta conversación.</p>
+              )}
+              {here.map(card)}
+            </>
+          )}
+          {others.length > 0 && (
+            <div className="notes-other">
+              <button
+                ref={otherToggleRef}
+                type="button"
+                className="notes-other-toggle"
+                aria-expanded={otherOpen}
+                aria-controls="notes-other-body"
+                onClick={toggleOthers}
+              >
+                <IconChevronDown size={14} className="notes-other-chevron" />
+                Otras conversaciones · {others.length}
+                {othersPending > 0 && (
+                  <span className="notes-other-pending">{othersPending} sin revisar</span>
+                )}
+              </button>
+              <div id="notes-other-body" className="notes-other-body" hidden={!otherOpen}>
+                {roundNumbers
+                  .filter((r) => others.some((n) => n.round === r))
+                  .map((r) => (
+                    <div key={r} className="notes-round-group">
+                      <p className="notes-round-label">
+                        {conversationName(r)}
+                        <button type="button" onClick={() => setRound(r)}>
+                          Abrir →
+                        </button>
+                      </p>
+                      {others.filter((n) => n.round === r).map(card)}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {error && <p className="form-error">{error}</p>}

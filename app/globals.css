@@ -4759,6 +4759,107 @@ body[data-theme="dark"] .history-filters input[type="date"]::-webkit-calendar-pi
   color: var(--faint);
 }
 
+/* Demo link, admin side: a quote is a way back to its message, WhatsApp
+   style, so it is a button that reads like the quote it was. */
+button.note-ref {
+  display: block;
+  width: 100%;
+  font-family: inherit;
+}
+button.note-ref:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.note-ref-go {
+  color: var(--accent);
+}
+
+/* Reports about the conversation on screen first; the rest folded under one
+   row, grouped by the conversation they came from. */
+.notes-round-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.notes-round-label button {
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  cursor: pointer;
+}
+.notes-round-label button:hover {
+  color: var(--accent);
+}
+.notes-group-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 2px 2px;
+}
+/* Folded, the row sticks to the bottom of the scrolling list: otherwise it
+   sits below the fold and nobody knows it is there. */
+.notes-other:has(> [aria-expanded="false"]) {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--surface);
+}
+.notes-other-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 2px 4px;
+  border: none;
+  border-top: 0.5px solid var(--border);
+  background: none;
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--muted);
+  cursor: pointer;
+}
+.notes-other-toggle:hover {
+  color: var(--fg);
+}
+.notes-other-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.notes-other-chevron {
+  transition: transform 0.2s ease;
+}
+.notes-other-toggle[aria-expanded="true"] .notes-other-chevron {
+  transform: rotate(180deg);
+}
+.notes-other-pending {
+  margin-left: auto;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+.notes-other-body,
+.notes-round-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.notes-other-body {
+  margin-top: 10px;
+}
+.notes-other-body[hidden] {
+  display: none;
+}
+
 /* Playground version switcher row in the session header (Sprint 8, T6). */
 .playground-version-row {
   display: flex;

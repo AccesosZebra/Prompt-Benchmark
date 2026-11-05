@@ -14,6 +14,7 @@
  * every note written before this shipped gains its pair for free.
  */
 import type { DemoMessageRow } from "./db/demo-sessions";
+import type { DemoNoteRow } from "./db/demo-notes";
 
 export type QuotedMessage = {
   /** The tagged id, kept even when it no longer resolves, so a caller can say
@@ -87,4 +88,31 @@ export function quotedWithContext(
     .filter((id) => !byId.has(id))
     .map((id) => ({ id, message: null, isContext: false }));
   return [...resolved, ...missing];
+}
+
+/**
+ * Which of the visitor's conversations a note belongs to, so the admin panel
+ * can show the ones about the conversation on screen first.
+ *
+ * A tagged note belongs where its message lives. A general note tags nothing,
+ * so it belongs to the conversation that was running when it was written: the
+ * last one to start before it. Same fallback for a tag that no longer resolves.
+ */
+export function noteRound(
+  note: Pick<DemoNoteRow, "message_ids" | "created_at">,
+  all: DemoMessageRow[],
+): number {
+  const byId = new Map(all.map((m) => [m.id, m]));
+  for (const id of note.message_ids) {
+    const m = byId.get(id);
+    if (m) return m.round;
+  }
+  const starts = new Map<number, number>();
+  for (const m of all) {
+    const t = Date.parse(m.created_at);
+    if (!starts.has(m.round) || t < starts.get(m.round)!) starts.set(m.round, t);
+  }
+  const written = Date.parse(note.created_at);
+  const before = [...starts].filter(([, t]) => t <= written).sort((a, b) => b[1] - a[1]);
+  return before[0]?.[0] ?? Math.max(1, ...starts.keys());
 }

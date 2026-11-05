@@ -16,7 +16,15 @@ export type NoteReviewPatch = {
  *  one from a conversation the visitor later restarted past; `context` marks
  *  the other half of the exchange, derived rather than tagged, so a reader
  *  sees what the client was answering and what answered them. */
-export type NoteQuote = { id: string; preview: string; stale?: boolean; context?: boolean };
+export type NoteQuote = {
+  id: string;
+  preview: string;
+  stale?: boolean;
+  context?: boolean;
+  /** Names the conversation a stale quote lives in, instead of the generic
+   *  "conversación anterior". */
+  where?: string;
+};
 
 /**
  * One client report and the verdict on it.
@@ -37,6 +45,9 @@ export function NoteCard({
   busy = false,
   onReview,
   footer,
+  onJumpToQuote,
+  flashed = false,
+  cardRef,
 }: {
   note: DemoNoteRow;
   /** The pin number drawn on the turns it tags, same convention as the
@@ -48,6 +59,11 @@ export function NoteCard({
   /** Where the report came from, when the card is read outside its own
    *  conversation. */
   footer?: ReactNode;
+  /** Makes each quote a button that takes the reader to its message, the way
+   *  a quoted reply does in WhatsApp. Omit and the quotes are plain text. */
+  onJumpToQuote?: (messageId: string) => void;
+  flashed?: boolean;
+  cardRef?: (el: HTMLDivElement | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draftText, setDraftText] = useState("");
@@ -76,7 +92,7 @@ export function NoteCard({
         : "Descartada";
 
   return (
-    <div className="note-card">
+    <div ref={cardRef} className={`note-card${flashed ? " is-flashed" : ""}`}>
       <div className="note-head">
         <span className="chat-pin note-index">{index}</span>
         {note.message_ids.length === 0 && <span className="note-general">General</span>}
@@ -98,16 +114,38 @@ export function NoteCard({
       {quotes.length > 0 && (
         <div className="note-refs">
           <span className="section-label">Mensajes que marcó</span>
-          {quotes.map((q) => (
-            <div
-              key={q.id}
-              className={`note-ref${q.context ? " note-ref-context" : ""}${q.stale ? " note-ref-stale" : ""}`}
-            >
-              “{q.preview}”
-              {q.context && <span className="note-ref-tag">lo que lo provocó</span>}
-              {q.stale && <span className="note-ref-tag">conversación anterior</span>}
-            </div>
-          ))}
+          {quotes.map((q) => {
+            const body = (
+              <>
+                “{q.preview}”
+                {q.context && <span className="note-ref-tag">lo que lo provocó</span>}
+                {q.stale && !q.context && (
+                  <span className="note-ref-tag">
+                    {q.where ?? "conversación anterior"}
+                    {onJumpToQuote && <span className="note-ref-go"> · ir al mensaje</span>}
+                  </span>
+                )}
+              </>
+            );
+            return onJumpToQuote ? (
+              <button
+                key={q.id}
+                type="button"
+                className={`note-ref${q.context ? " note-ref-context" : ""}`}
+                onClick={() => onJumpToQuote(q.id)}
+                title="Ir al mensaje"
+              >
+                {body}
+              </button>
+            ) : (
+              <div
+                key={q.id}
+                className={`note-ref${q.context ? " note-ref-context" : ""}${q.stale ? " note-ref-stale" : ""}`}
+              >
+                {body}
+              </div>
+            );
+          })}
         </div>
       )}
 
